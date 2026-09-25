@@ -72,6 +72,9 @@ fun ScoreEntryScreen(
         session.players.filterNot { p -> standings.first { it.player.id == p.id }.isEliminated }
             .associate { it.id to mutableStateOf(RoundOutcome.NORMAL to "") }
     }
+    // Tracks whether the player has tried to submit this round with something still
+    // invalid, so errors only appear after a real attempt rather than nagging on load.
+    var showErrors by remember(session.id, nextRoundNumber) { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().background(Cream)) {
         Row(
@@ -116,12 +119,15 @@ fun ScoreEntryScreen(
                 }
                 items(entries.entries.toList(), key = { it.key }) { (playerId, state) ->
                     val player = session.players.first { it.id == playerId }
+                    val isRummy = session.gameType == GameType.RUMMY
+                    val (outcome, text) = state.value
                     RoundEntryCard(
                         player = player,
-                        isRummy = session.gameType == GameType.RUMMY,
-                        outcome = state.value.first,
-                        text = state.value.second,
+                        isRummy = isRummy,
+                        outcome = outcome,
+                        text = text,
                         rules = session.rules,
+                        showError = showErrors && !isRoundEntryValid(isRummy, outcome, text),
                         onOutcomeChange = { state.value = it to state.value.second },
                         onTextChange = { state.value = state.value.first to it }
                     )
@@ -146,16 +152,25 @@ fun ScoreEntryScreen(
             if (!gameOver) {
                 Button(
                     onClick = {
-                        val result = entries.mapValues { (_, state) ->
+                        val isRummy = session.gameType == GameType.RUMMY
+                        val allValid = entries.values.all { state ->
                             val (outcome, text) = state.value
-                            val raw = if (session.gameType == GameType.RUMMY) {
-                                RummyScoringEngine.penaltyFor(outcome, session.rules, text.toIntOrNull() ?: 0)
-                            } else {
-                                text.toIntOrNull() ?: 0
-                            }
-                            raw to outcome
+                            isRoundEntryValid(isRummy, outcome, text)
                         }
-                        onSubmitRound(result)
+                        if (!allValid) {
+                            showErrors = true
+                        } else {
+                            val result = entries.mapValues { (_, state) ->
+                                val (outcome, text) = state.value
+                                val raw = if (isRummy) {
+                                    RummyScoringEngine.penaltyFor(outcome, session.rules, text.toIntOrNull() ?: 0)
+                                } else {
+                                    text.toIntOrNull() ?: 0
+                                }
+                                raw to outcome
+                            }
+                            onSubmitRound(result)
+                        }
                     },
                     modifier = Modifier.weight(2f),
                     colors = ButtonDefaults.buttonColors(containerColor = Green)
@@ -164,6 +179,29 @@ fun ScoreEntryScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * Whether one player's round-entry state is complete enough to submit.
+ *
+ * Plain-point games (Uno, Phase 10, Custom) always need a non-blank, non-negative
+ * whole number -- previously `text.toIntOrNull() ?: 0` let a blank or garbled field
+ * through as a silent 0, which is the bug this fixes.
+ *
+ * Rummy: a drop/full-count chip fully determines the penalty on its own, so no text
+ * is required there. WIN is usually 0, so a blank field is accepted as 0 there too.
+ * But the *default*, untouched state (NORMAL, no chip pressed) means the player
+ * hasn't said anything yet -- treated as invalid unless they've typed a real number
+ * (which reads as "manual deadwood entry" for that round).
+ */
+private fun isRoundEntryValid(isRummy: Boolean, outcome: RoundOutcome, text: String): Boolean {
+    fun isValidNonNegativeInt(s: String) = s.toIntOrNull()?.let { it >= 0 } == true
+    if (!isRummy) return isValidNonNegativeInt(text)
+    return when (outcome) {
+        RoundOutcome.FIRST_DROP, RoundOutcome.MIDDLE_DROP, RoundOutcome.FULL_COUNT -> true
+        RoundOutcome.WIN -> text.isBlank() || isValidNonNegativeInt(text)
+        RoundOutcome.NORMAL -> isValidNonNegativeInt(text)
     }
 }
 
@@ -218,10 +256,15 @@ private fun RoundEntryCard(
     outcome: RoundOutcome,
     text: String,
     rules: com.scorekeeper.domain.GameRules,
+    showError: Boolean,
     onOutcomeChange: (RoundOutcome) -> Unit,
     onTextChange: (String) -> Unit
 ) {
-    Surface(shape = RoundedCornerShape(16.dp), color = Color.White, border = BorderStroke(1.dp, Border)) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Color.White,
+        border = BorderStroke(if (showError) 1.5.dp else 1.dp, if (showError) Danger else Border)
+    ) {
         Column(Modifier.padding(14.dp)) {
             Text(player.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             if (isRummy) {
@@ -243,9 +286,15 @@ private fun RoundEntryCard(
                             value = text,
                             onValueChange = onTextChange,
                             label = { Text(if (outcome == RoundOutcome.WIN) "Points (usually 0)" else "Deadwood points") },
+                            isError = showError,
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
                         )
+                        if (showError && outcome == RoundOutcome.NORMAL) {
+                            ErrorNote("Pick an outcome above, or enter this player's deadwood points.")
+                        } else if (showError) {
+                            ErrorNote("Enter a valid points value, or leave it blank for 0.")
+                        }
                     }
                 }
             } else {
@@ -253,12 +302,26 @@ private fun RoundEntryCard(
                     value = text,
                     onValueChange = onTextChange,
                     label = { Text("Points this round") },
+                    isError = showError,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
                 )
+                if (showError) {
+                    ErrorNote("Enter this player's points for the round.")
+                }
             }
         }
     }
+}
+
+@Composable
+private fun ErrorNote(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = Danger,
+        modifier = Modifier.padding(top = 6.dp)
+    )
 }
 
 @Composable

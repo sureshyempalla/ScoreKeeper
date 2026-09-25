@@ -1,9 +1,13 @@
 package com.scorekeeper.app.ui
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
@@ -32,6 +36,7 @@ import com.scorekeeper.app.ui.screens.RoundHistoryScreen
 import com.scorekeeper.app.ui.screens.ScoreEntryScreen
 import com.scorekeeper.app.ui.screens.SetupScreen
 import com.scorekeeper.app.ui.screens.SummaryScreen
+import com.scorekeeper.app.ui.theme.Cream
 import com.scorekeeper.app.ui.theme.ScoreKeeperTheme
 import com.scorekeeper.domain.AuthStatuses
 import com.scorekeeper.domain.CommunityEvent
@@ -69,7 +74,17 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
     var pendingSportEmoji by remember { mutableStateOf("") }
     val events by controller.events.collectAsStateWithLifecycle()
 
-    NavHost(navController = navController, startDestination = Screen.Home.route) {
+    // Android 15 (targetSdk 35) draws content edge-to-edge under the status bar and behind
+    // the gesture nav bar regardless of what MainActivity does, so every screen needs this
+    // safe-area padding -- applied once here rather than per-screen. The Surface behind it
+    // means the sliver under the system bars shows Cream instead of the window's default
+    // background color.
+    Surface(modifier = Modifier.fillMaxSize(), color = Cream) {
+    NavHost(
+        navController = navController,
+        startDestination = Screen.Home.route,
+        modifier = Modifier.fillMaxSize().systemBarsPadding()
+    ) {
             composable(Screen.Home.route) {
                 HomeScreen(
                     sessions = sessions,
@@ -407,6 +422,7 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                 }
             }
         }
+    }
     }
 
 /** Bridges AppController's callback-based watchSession into Compose state. */
