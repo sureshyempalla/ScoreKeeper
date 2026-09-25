@@ -16,5 +16,15 @@
     <array>
         <string>UIInterfaceOrientationPortrait</string>
     </array>
+    <key>UIAppFonts</key>
+    <array>
+        <string>Fraunces-Regular.ttf</string>
+        <string>Fraunces-SemiBold.ttf</string>
+        <string>Fraunces-Bold.ttf</string>
+        <string>WorkSans-Regular.ttf</string>
+        <string>WorkSans-Medium.ttf</string>
+        <string>WorkSans-SemiBold.ttf</string>
+        <string>WorkSans-Bold.ttf</string>
+    </array>
 </dict>
 </plist>

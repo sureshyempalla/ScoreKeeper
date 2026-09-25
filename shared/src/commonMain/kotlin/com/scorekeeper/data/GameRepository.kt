@@ -6,6 +6,7 @@ import app.cash.sqldelight.coroutines.mapToOneOrNull
 import com.scorekeeper.db.GameSessionEntity
 import com.scorekeeper.db.PlayerEntity
 import com.scorekeeper.db.RoundScoreEntity
+import com.scorekeeper.db.SavedPlayerEntity
 import com.scorekeeper.db.ScoreKeeperDatabase
 import com.scorekeeper.domain.GameRules
 import com.scorekeeper.domain.GameSession
@@ -13,6 +14,7 @@ import com.scorekeeper.domain.GameType
 import com.scorekeeper.domain.Player
 import com.scorekeeper.domain.RoundOutcome
 import com.scorekeeper.domain.RoundScore
+import com.scorekeeper.domain.SavedPlayer
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -122,6 +124,33 @@ class GameRepository(
 
     /** Convenience one-shot fetch used right after writes when a Flow re-emit isn't guaranteed synchronously. */
     suspend fun refreshedSession(sessionId: String): GameSession? = getSession(sessionId)
+
+    // Saved players (device-wide roster, independent of any one session) ------
+
+    suspend fun addSavedPlayer(name: String): String = withContext(ioDispatcher) {
+        val id = newId()
+        val existingCount = q.selectAllSavedPlayers().executeAsList().size
+        q.insertSavedPlayer(
+            id = id,
+            name = name,
+            colorIndex = existingCount.toLong(),
+            createdAt = Clock.System.now().toEpochMilliseconds()
+        )
+        id
+    }
+
+    suspend fun deleteSavedPlayer(id: String) = withContext(ioDispatcher) {
+        q.deleteSavedPlayer(id)
+    }
+
+    fun observeSavedPlayers(): Flow<List<SavedPlayer>> =
+        q.selectAllSavedPlayers().asFlow().mapToList(ioDispatcher).map { rows -> rows.map { it.toDomain() } }
+
+    private fun SavedPlayerEntity.toDomain(): SavedPlayer = SavedPlayer(
+        id = id,
+        name = name,
+        colorIndex = colorIndex.toInt()
+    )
 
     private fun GameSessionEntity.toDomainShallow(): GameSession = GameSession(
         id = id,

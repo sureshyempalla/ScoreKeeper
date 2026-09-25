@@ -19,6 +19,16 @@
 		A1000001000000000000A010 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B011 /* GoogleService-Info.plist */; };
 		A1000001000000000000A012 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B012 /* AuthViewModel.swift */; };
 		A1000001000000000000A013 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B013 /* LoginView.swift */; };
+		A1000001000000000000A014 /* Fonts.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B014 /* Fonts.swift */; };
+		A1000001000000000000A022 /* HomeBottomNavBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B022 /* HomeBottomNavBar.swift */; };
+		A1000001000000000000A023 /* ComingSoonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B023 /* ComingSoonView.swift */; };
+		A1000001000000000000A015 /* Fraunces-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B015 /* Fraunces-Regular.ttf */; };
+		A1000001000000000000A016 /* Fraunces-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B016 /* Fraunces-SemiBold.ttf */; };
+		A1000001000000000000A017 /* Fraunces-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B017 /* Fraunces-Bold.ttf */; };
+		A1000001000000000000A018 /* WorkSans-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B018 /* WorkSans-Regular.ttf */; };
+		A1000001000000000000A019 /* WorkSans-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B019 /* WorkSans-Medium.ttf */; };
+		A1000001000000000000A020 /* WorkSans-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B020 /* WorkSans-SemiBold.ttf */; };
+		A1000001000000000000A021 /* WorkSans-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A1000001000000000000B021 /* WorkSans-Bold.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +45,16 @@
 		A1000001000000000000B011 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		A1000001000000000000B012 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
 		A1000001000000000000B013 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		A1000001000000000000B014 /* Fonts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fonts.swift; sourceTree = "<group>"; };
+		A1000001000000000000B022 /* HomeBottomNavBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeBottomNavBar.swift; sourceTree = "<group>"; };
+		A1000001000000000000B023 /* ComingSoonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComingSoonView.swift; sourceTree = "<group>"; };
+		A1000001000000000000B015 /* Fraunces-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fraunces-Regular.ttf"; sourceTree = "<group>"; };
+		A1000001000000000000B016 /* Fraunces-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fraunces-SemiBold.ttf"; sourceTree = "<group>"; };
+		A1000001000000000000B017 /* Fraunces-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fraunces-Bold.ttf"; sourceTree = "<group>"; };
+		A1000001000000000000B018 /* WorkSans-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "WorkSans-Regular.ttf"; sourceTree = "<group>"; };
+		A1000001000000000000B019 /* WorkSans-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "WorkSans-Medium.ttf"; sourceTree = "<group>"; };
+		A1000001000000000000B020 /* WorkSans-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "WorkSans-SemiBold.ttf"; sourceTree = "<group>"; };
+		A1000001000000000000B021 /* WorkSans-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "WorkSans-Bold.ttf"; sourceTree = "<group>"; };
 		A1000001000000000000C001 /* iosApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -71,8 +91,10 @@
 				A1000001000000000000B001 /* iOSApp.swift */,
 				A1000001000000000000B002 /* ContentView.swift */,
 				A1000001000000000000B003 /* Theme.swift */,
+				A1000001000000000000B014 /* Fonts.swift */,
 				A1000001000000000000E003 /* Models */,
 				A1000001000000000000E004 /* Views */,
+				A1000001000000000000E005 /* Fonts */,
 				A1000001000000000000B010 /* Info.plist */,
 				A1000001000000000000B011 /* GoogleService-Info.plist */,
 			);
@@ -97,8 +119,24 @@
 				A1000001000000000000B008 /* ScoreEntryView.swift */,
 				A1000001000000000000B009 /* SummaryView.swift */,
 				A1000001000000000000B013 /* LoginView.swift */,
+				A1000001000000000000B022 /* HomeBottomNavBar.swift */,
+				A1000001000000000000B023 /* ComingSoonView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		A1000001000000000000E005 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				A1000001000000000000B015 /* Fraunces-Regular.ttf */,
+				A1000001000000000000B016 /* Fraunces-SemiBold.ttf */,
+				A1000001000000000000B017 /* Fraunces-Bold.ttf */,
+				A1000001000000000000B018 /* WorkSans-Regular.ttf */,
+				A1000001000000000000B019 /* WorkSans-Medium.ttf */,
+				A1000001000000000000B020 /* WorkSans-SemiBold.ttf */,
+				A1000001000000000000B021 /* WorkSans-Bold.ttf */,
+			);
+			path = Fonts;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -161,6 +199,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000001000000000000A010 /* GoogleService-Info.plist in Resources */,
+				A1000001000000000000A015 /* Fraunces-Regular.ttf in Resources */,
+				A1000001000000000000A016 /* Fraunces-SemiBold.ttf in Resources */,
+				A1000001000000000000A017 /* Fraunces-Bold.ttf in Resources */,
+				A1000001000000000000A018 /* WorkSans-Regular.ttf in Resources */,
+				A1000001000000000000A019 /* WorkSans-Medium.ttf in Resources */,
+				A1000001000000000000A020 /* WorkSans-SemiBold.ttf in Resources */,
+				A1000001000000000000A021 /* WorkSans-Bold.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -203,6 +248,9 @@
 				A1000001000000000000A009 /* SummaryView.swift in Sources */,
 				A1000001000000000000A012 /* AuthViewModel.swift in Sources */,
 				A1000001000000000000A013 /* LoginView.swift in Sources */,
+				A1000001000000000000A014 /* Fonts.swift in Sources */,
+				A1000001000000000000A022 /* HomeBottomNavBar.swift in Sources */,
+				A1000001000000000000A023 /* ComingSoonView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

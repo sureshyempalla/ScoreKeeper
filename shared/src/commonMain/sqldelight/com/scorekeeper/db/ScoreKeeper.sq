@@ -33,6 +33,15 @@ CREATE TABLE RoundScoreEntity (
     FOREIGN KEY (playerId) REFERENCES PlayerEntity(id) ON DELETE CASCADE
 );
 
+-- A player saved to the device's reusable roster, independent of any one
+-- session -- shown on Home and picked from when starting a new game/event.
+CREATE TABLE SavedPlayerEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    colorIndex INTEGER NOT NULL,
+    createdAt INTEGER NOT NULL
+);
+
 -- Sessions -------------------------------------------------------------
 
 insertSession:
@@ -81,3 +90,15 @@ DELETE FROM RoundScoreEntity WHERE id = ?;
 deleteLastRoundForSession:
 DELETE FROM RoundScoreEntity
 WHERE sessionId = ? AND roundNumber = (SELECT MAX(roundNumber) FROM RoundScoreEntity WHERE sessionId = ?);
+
+-- Saved players --------------------------------------------------------
+
+insertSavedPlayer:
+INSERT INTO SavedPlayerEntity(id, name, colorIndex, createdAt)
+VALUES (?, ?, ?, ?);
+
+selectAllSavedPlayers:
+SELECT * FROM SavedPlayerEntity ORDER BY createdAt ASC;
+
+deleteSavedPlayer:
+DELETE FROM SavedPlayerEntity WHERE id = ?;

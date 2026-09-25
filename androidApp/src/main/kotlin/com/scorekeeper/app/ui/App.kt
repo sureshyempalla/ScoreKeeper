@@ -1,6 +1,7 @@
 package com.scorekeeper.app.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
@@ -14,6 +15,7 @@ import com.scorekeeper.AppController
 import com.scorekeeper.AuthController
 import com.scorekeeper.app.ui.nav.Screen
 import com.scorekeeper.app.ui.screens.AddPlayersScreen
+import com.scorekeeper.app.ui.screens.ComingSoonScreen
 import com.scorekeeper.app.ui.screens.GamePickerScreen
 import com.scorekeeper.app.ui.screens.HomeScreen
 import com.scorekeeper.app.ui.screens.LoginScreen
@@ -27,39 +29,62 @@ import com.scorekeeper.domain.GameType
 @Composable
 fun ScoreKeeperApp(controller: AppController, authController: AuthController) {
     ScoreKeeperTheme {
-        val authState by authController.uiState.collectAsStateWithLifecycle()
-        val activity = LocalContext.current
-
-        val hasAccess = authState.statusId == AuthStatuses.SIGNED_IN || authState.statusId == AuthStatuses.GUEST
-        if (!hasAccess) {
-            LoginScreen(
-                uiState = authState,
-                onSignInEmail = { email, password -> authController.signInWithEmail(email, password) },
-                onSignUpEmail = { email, password -> authController.signUpWithEmail(email, password) },
-                onSendPhoneCode = { phone -> authController.startPhoneVerification(phone, activity) },
-                onConfirmPhoneCode = { code -> authController.confirmPhoneCode(code, activity) },
-                onClearError = { authController.clearError() },
-                onContinueAsGuest = { authController.continueAsGuest() }
-            )
-        } else {
-            ScoreKeeperHome(controller)
-        }
+        ScoreKeeperHome(controller, authController)
     }
 }
 
 @Composable
-private fun ScoreKeeperHome(controller: AppController) {
+private fun ScoreKeeperHome(controller: AppController, authController: AuthController) {
     val navController = rememberNavController()
     val sessions by controller.sessions.collectAsStateWithLifecycle()
+    val savedPlayers by controller.savedPlayers.collectAsStateWithLifecycle()
+    val authState by authController.uiState.collectAsStateWithLifecycle()
+    val activity = LocalContext.current
 
     NavHost(navController = navController, startDestination = Screen.Home.route) {
             composable(Screen.Home.route) {
                 HomeScreen(
                     sessions = sessions,
+                    savedPlayers = savedPlayers,
+                    authStatusId = authState.statusId,
                     onNewGame = { navController.navigate(Screen.GamePicker.route) },
+                    onOpenEvents = { navController.navigate(Screen.ComingSoon.build("Events")) },
                     onOpenSession = { sessionId -> navController.navigate(Screen.ScoreEntry.build(sessionId)) },
+                    onOpenStats = { navController.navigate(Screen.ComingSoon.build("Stats")) },
+                    onOpenProfile = { navController.navigate(Screen.ComingSoon.build("Profile")) },
+                    onSignInBannerClick = { navController.navigate(Screen.Login.route) },
+                    onAddSavedPlayer = { name -> controller.addSavedPlayer(name) },
                     onDeleteSession = { controller.deleteSession(it) }
                 )
+            }
+
+            composable(Screen.Login.route) {
+                // Once sign-in succeeds, drop the Login screen and return to Home.
+                LaunchedEffect(authState.statusId) {
+                    if (authState.statusId == AuthStatuses.SIGNED_IN) {
+                        navController.popBackStack()
+                    }
+                }
+                LoginScreen(
+                    uiState = authState,
+                    onSignInEmail = { email, password -> authController.signInWithEmail(email, password) },
+                    onSignUpEmail = { email, password -> authController.signUpWithEmail(email, password) },
+                    onSendPhoneCode = { phone -> authController.startPhoneVerification(phone, activity) },
+                    onConfirmPhoneCode = { code -> authController.confirmPhoneCode(code, activity) },
+                    onClearError = { authController.clearError() },
+                    onContinueAsGuest = {
+                        authController.continueAsGuest()
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            composable(
+                Screen.ComingSoon.route,
+                arguments = listOf(navArgument("feature") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val feature = backStackEntry.arguments?.getString("feature") ?: "This"
+                ComingSoonScreen(feature = feature, onBack = { navController.popBackStack() })
             }
 
             composable(Screen.GamePicker.route) {

@@ -14,8 +14,11 @@ final class AppViewModel: ObservableObject {
     let controller: AppController
 
     @Published var sessions: [GameSession] = []
+    /// Home's "Saved Players" row -- a device-wide roster, independent of any one session.
+    @Published var savedPlayers: [SavedPlayer] = []
 
     private var sessionsWatch: Cancellable?
+    private var savedPlayersWatch: Cancellable?
 
     init(controller: AppController) {
         self.controller = controller
@@ -24,10 +27,24 @@ final class AppViewModel: ObservableObject {
                 self?.sessions = sessions
             }
         }
+        savedPlayersWatch = controller.watchSavedPlayers { [weak self] players in
+            DispatchQueue.main.async {
+                self?.savedPlayers = players
+            }
+        }
     }
 
     deinit {
         sessionsWatch?.cancel()
+        savedPlayersWatch?.cancel()
+    }
+
+    func addSavedPlayer(name: String) {
+        controller.addSavedPlayer(name: name)
+    }
+
+    func deleteSavedPlayer(id: String) {
+        controller.deleteSavedPlayer(id: id)
     }
 
     func newGame(gameTypeId: String, sessionName: String, playerNames: [String], rules: GameRules, onCreated: @escaping (String) -> Void) {

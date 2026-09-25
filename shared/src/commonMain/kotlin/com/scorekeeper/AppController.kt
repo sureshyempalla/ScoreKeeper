@@ -6,6 +6,7 @@ import com.scorekeeper.domain.GameSession
 import com.scorekeeper.domain.GameType
 import com.scorekeeper.domain.PlayerStanding
 import com.scorekeeper.domain.RoundOutcome
+import com.scorekeeper.domain.SavedPlayer
 import com.scorekeeper.scoring.ScoringEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +46,23 @@ class AppController(private val repository: GameRepository) {
 
     val sessions: StateFlow<List<GameSession>> =
         repository.observeSessions().stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    /** Home's "Saved Players" row -- a device-wide roster, independent of any one session. */
+    val savedPlayers: StateFlow<List<SavedPlayer>> =
+        repository.observeSavedPlayers().stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    fun watchSavedPlayers(onChange: (List<SavedPlayer>) -> Unit): Cancellable {
+        val job = scope.launch { repository.observeSavedPlayers().collect { onChange(it) } }
+        return JobCancellable(job)
+    }
+
+    fun addSavedPlayer(name: String) {
+        scope.launch { repository.addSavedPlayer(name) }
+    }
+
+    fun deleteSavedPlayer(id: String) {
+        scope.launch { repository.deleteSavedPlayer(id) }
+    }
 
     fun watchSessions(onChange: (List<GameSession>) -> Unit): Cancellable {
         val job = scope.launch { repository.observeSessions().collect { onChange(it) } }

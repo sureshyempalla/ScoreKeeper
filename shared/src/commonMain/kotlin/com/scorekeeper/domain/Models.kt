@@ -82,6 +82,20 @@ data class GameSession(
     val rounds: List<RoundScore> = emptyList()
 )
 
+/**
+ * A player saved to the device's reusable roster (Home's "Saved Players" row,
+ * and the picker on PlayerPicker/AddParticipants) -- independent of any one
+ * session's [Player] rows. [colorIndex] picks a stable avatar color, cycled
+ * by the UI rather than stored as a literal color so the palette can change
+ * without a migration.
+ */
+@Serializable
+data class SavedPlayer(
+    val id: String,
+    val name: String,
+    val colorIndex: Int
+)
+
 /** A player's computed standing within a session, ready for the UI to render. */
 data class PlayerStanding(
     val player: Player,

@@ -16,6 +16,16 @@ val Border = Color(0xFFE8E3D9)
 val Muted = Color(0xFF6B6660)
 val Danger = Color(0xFFC0463C)
 
+/** Cycled by [com.scorekeeper.domain.SavedPlayer.colorIndex] for avatar backgrounds. */
+val AvatarColors = listOf(
+    Green,
+    Amber,
+    Color(0xFF8B7CD8),
+    Danger,
+    Color(0xFF5B8DEF),
+    Color(0xFFD06BA6)
+)
+
 private val LightColors = lightColorScheme(
     primary = Green,
     onPrimary = Color.White,
@@ -34,5 +44,5 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun ScoreKeeperTheme(content: @Composable () -> Unit) {
     val colors = if (isSystemInDarkTheme()) DarkColors else LightColors
-    MaterialTheme(colorScheme = colors, content = content)
+    MaterialTheme(colorScheme = colors, typography = ScoreKeeperTypography, content = content)
 }
