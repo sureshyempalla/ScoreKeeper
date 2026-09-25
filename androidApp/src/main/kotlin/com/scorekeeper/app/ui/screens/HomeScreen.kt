@@ -345,5 +345,5 @@ private fun AddSavedPlayerDialog(onDismiss: () -> Unit, onConfirm: (String) -> U
     )
 }
 
-private fun Modifier.clip(radius: androidx.compose.ui.unit.Dp) =
-    this.then(androidx.compose.ui.draw.clip(RoundedCornerShape(radius)))
+private fun Modifier.clip(radius: androidx.compose.ui.unit.Dp): Modifier =
+    this.clip(RoundedCornerShape(radius))

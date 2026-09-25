@@ -1,0 +1,10 @@
+-- Adds the device-wide Saved Players roster (see ScoreKeeper.sq's
+-- SavedPlayerEntity). Existing installs are on schema version 1 and don't
+-- have this table yet; this migration brings them to version 2 without
+-- touching any existing game/session/round data.
+CREATE TABLE SavedPlayerEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    colorIndex INTEGER NOT NULL,
+    createdAt INTEGER NOT NULL
+);
