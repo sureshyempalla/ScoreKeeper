@@ -55,4 +55,8 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.core)
+    // Needed directly here (not just transitively via :shared, which declares it as
+    // `implementation` not `api`) for EventDateFormat.kt / CreateEventScreen.kt's use
+    // of kotlinx.datetime.Clock/Instant/LocalDate/TimeZone.
+    implementation(libs.kotlinx.datetime)
 }

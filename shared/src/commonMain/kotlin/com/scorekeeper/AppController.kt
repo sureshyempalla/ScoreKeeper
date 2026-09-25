@@ -1,12 +1,18 @@
 package com.scorekeeper
 
 import com.scorekeeper.data.GameRepository
+import com.scorekeeper.domain.CommunityEvent
+import com.scorekeeper.domain.EntrantStanding
+import com.scorekeeper.domain.EventGame
+import com.scorekeeper.domain.EventTeamMode
 import com.scorekeeper.domain.GameRules
 import com.scorekeeper.domain.GameSession
 import com.scorekeeper.domain.GameType
 import com.scorekeeper.domain.PlayerStanding
 import com.scorekeeper.domain.RoundOutcome
 import com.scorekeeper.domain.SavedPlayer
+import com.scorekeeper.domain.TournamentFormat
+import com.scorekeeper.events.EventStandings
 import com.scorekeeper.scoring.ScoringEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -139,4 +145,66 @@ class AppController(private val repository: GameRepository) {
     /** The next round number to record for [session] (1-based). */
     fun nextRoundNumber(session: GameSession): Int =
         (session.rounds.maxOfOrNull { it.roundNumber } ?: 0) + 1
+
+    // --- Community Events --------------------------------------------------
+
+    val events: StateFlow<List<CommunityEvent>> =
+        repository.observeEvents().stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    fun createEvent(name: String, emoji: String, dateMillis: Long, location: String?, onCreated: (String) -> Unit) {
+        scope.launch { onCreated(repository.createEvent(name, emoji, dateMillis, location)) }
+    }
+
+    fun watchEvent(eventId: String, onChange: (CommunityEvent?) -> Unit): Cancellable {
+        val job = scope.launch { onChange(repository.getEvent(eventId)) }
+        return JobCancellable(job)
+    }
+
+    fun watchEventGames(eventId: String, onChange: (List<EventGame>) -> Unit): Cancellable {
+        val job = scope.launch { repository.observeEventGames(eventId).collect { onChange(it) } }
+        return JobCancellable(job)
+    }
+
+    fun deleteEvent(eventId: String) {
+        scope.launch { repository.deleteEvent(eventId) }
+    }
+
+    fun addEventGame(
+        eventId: String,
+        sportName: String,
+        emoji: String,
+        format: TournamentFormat,
+        teamMode: EventTeamMode,
+        playersPerTeam: Int,
+        onCreated: (String) -> Unit
+    ) {
+        scope.launch {
+            onCreated(repository.addEventGame(eventId, sportName, emoji, format, teamMode, playersPerTeam))
+        }
+    }
+
+    fun watchEventGameDetail(gameId: String, onChange: (EventGame?) -> Unit): Cancellable {
+        val job = scope.launch { repository.observeEventGameDetail(gameId).collect { onChange(it) } }
+        return JobCancellable(job)
+    }
+
+    fun generateDraw(gameId: String, eventId: String, names: List<String>) {
+        scope.launch { repository.generateDraw(gameId, eventId, names) }
+    }
+
+    fun saveMatchProgress(matchId: String, scoreA: Int, scoreB: Int) {
+        scope.launch { repository.saveMatchProgress(matchId, scoreA, scoreB) }
+    }
+
+    fun declareMatchWinner(matchId: String, scoreA: Int, scoreB: Int, winnerEntrantId: String) {
+        scope.launch { repository.declareMatchWinner(matchId, scoreA, scoreB, winnerEntrantId) }
+    }
+
+    fun markGameCompleteIfAllMatchesDone(gameId: String) {
+        scope.launch { repository.markGameCompleteIfAllMatchesDone(gameId) }
+    }
+
+    fun standingsFor(game: EventGame): List<EntrantStanding> = EventStandings.compute(game)
+
+    fun championFor(game: EventGame) = EventStandings.champion(game)
 }

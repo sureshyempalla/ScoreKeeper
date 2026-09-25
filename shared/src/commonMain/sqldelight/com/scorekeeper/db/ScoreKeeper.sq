@@ -42,6 +42,59 @@ CREATE TABLE SavedPlayerEntity (
     createdAt INTEGER NOT NULL
 );
 
+-- Community Events: an occasion (e.g. "Diwali 2026") that bundles several
+-- games/sports, each with its own bracket or round-robin schedule.
+CREATE TABLE EventEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    eventDate INTEGER NOT NULL,
+    location TEXT,
+    createdAt INTEGER NOT NULL
+);
+
+-- One game/sport within an event (e.g. "Volleyball" inside "Diwali 2026").
+CREATE TABLE EventGameEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    eventId TEXT NOT NULL,
+    sportName TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    format TEXT NOT NULL,              -- SINGLE_ELIMINATION | DOUBLE_ELIMINATION | ROUND_ROBIN
+    teamMode TEXT NOT NULL,            -- SINGLES | DOUBLES | TEAMS
+    playersPerTeam INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'SETUP',
+    orderIndex INTEGER NOT NULL,
+    FOREIGN KEY (eventId) REFERENCES EventEntity(id) ON DELETE CASCADE
+);
+
+-- A single entrant in one event game's bracket -- a player (Singles) or a
+-- team name (Doubles/Teams); either way just a named slot in the draw.
+CREATE TABLE EventEntrantEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    eventGameId TEXT NOT NULL,
+    name TEXT NOT NULL,
+    colorIndex INTEGER NOT NULL,
+    seed INTEGER NOT NULL,
+    FOREIGN KEY (eventGameId) REFERENCES EventGameEntity(id) ON DELETE CASCADE
+);
+
+-- One match in an event game's bracket (elimination) or schedule (round robin).
+CREATE TABLE EventMatchEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    eventGameId TEXT NOT NULL,
+    roundLabel TEXT NOT NULL,
+    matchIndex INTEGER NOT NULL,
+    entrantAId TEXT,
+    entrantBId TEXT,
+    scoreA INTEGER NOT NULL DEFAULT 0,
+    scoreB INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'PENDING',   -- PENDING | LIVE | COMPLETE
+    winnerEntrantId TEXT,
+    nextMatchId TEXT,
+    nextMatchSlot INTEGER,
+    FOREIGN KEY (eventGameId) REFERENCES EventGameEntity(id) ON DELETE CASCADE
+);
+
 -- Sessions -------------------------------------------------------------
 
 insertSession:
@@ -102,3 +155,72 @@ SELECT * FROM SavedPlayerEntity ORDER BY createdAt ASC;
 
 deleteSavedPlayer:
 DELETE FROM SavedPlayerEntity WHERE id = ?;
+
+-- Events -----------------------------------------------------------------
+
+insertEvent:
+INSERT INTO EventEntity(id, name, emoji, eventDate, location, createdAt)
+VALUES (?, ?, ?, ?, ?, ?);
+
+selectAllEvents:
+SELECT * FROM EventEntity ORDER BY eventDate DESC;
+
+selectEventById:
+SELECT * FROM EventEntity WHERE id = ?;
+
+deleteEvent:
+DELETE FROM EventEntity WHERE id = ?;
+
+-- Event games --------------------------------------------------------------
+
+insertEventGame:
+INSERT INTO EventGameEntity(id, eventId, sportName, emoji, format, teamMode, playersPerTeam, status, orderIndex)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectGamesByEvent:
+SELECT * FROM EventGameEntity WHERE eventId = ? ORDER BY orderIndex ASC;
+
+selectGameById:
+SELECT * FROM EventGameEntity WHERE id = ?;
+
+updateGameStatus:
+UPDATE EventGameEntity SET status = ? WHERE id = ?;
+
+-- Event entrants -----------------------------------------------------------
+
+insertEntrant:
+INSERT INTO EventEntrantEntity(id, eventGameId, name, colorIndex, seed)
+VALUES (?, ?, ?, ?, ?);
+
+selectEntrantsByGame:
+SELECT * FROM EventEntrantEntity WHERE eventGameId = ? ORDER BY seed ASC;
+
+deleteEntrantsByGame:
+DELETE FROM EventEntrantEntity WHERE eventGameId = ?;
+
+-- Event matches --------------------------------------------------------------
+
+insertMatch:
+INSERT INTO EventMatchEntity(id, eventGameId, roundLabel, matchIndex, entrantAId, entrantBId, scoreA, scoreB, status, winnerEntrantId, nextMatchId, nextMatchSlot)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectMatchesByGame:
+SELECT * FROM EventMatchEntity WHERE eventGameId = ? ORDER BY roundLabel ASC, matchIndex ASC;
+
+selectMatchById:
+SELECT * FROM EventMatchEntity WHERE id = ?;
+
+updateMatchScore:
+UPDATE EventMatchEntity SET scoreA = ?, scoreB = ?, status = ? WHERE id = ?;
+
+updateMatchResult:
+UPDATE EventMatchEntity SET scoreA = ?, scoreB = ?, status = ?, winnerEntrantId = ? WHERE id = ?;
+
+updateMatchEntrantA:
+UPDATE EventMatchEntity SET entrantAId = ? WHERE id = ?;
+
+updateMatchEntrantB:
+UPDATE EventMatchEntity SET entrantBId = ? WHERE id = ?;
+
+deleteMatchesByGame:
+DELETE FROM EventMatchEntity WHERE eventGameId = ?;
