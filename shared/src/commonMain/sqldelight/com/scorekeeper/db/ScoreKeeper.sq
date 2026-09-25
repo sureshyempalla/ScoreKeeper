@@ -1,0 +1,83 @@
+-- A game session: one played instance of a game (e.g. "Friday Rummy night")
+CREATE TABLE GameSessionEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    gameType TEXT NOT NULL,           -- "UNO" | "RUMMY" | "PHASE10" | "CUSTOM"
+    name TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,       -- epoch millis
+    isFinished INTEGER NOT NULL DEFAULT 0,
+    -- JSON blob of game-specific rules (pool limit, drop penalties, target score, etc.)
+    rulesJson TEXT NOT NULL DEFAULT '{}'
+);
+
+-- A player participating in a session
+CREATE TABLE PlayerEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    sessionId TEXT NOT NULL,
+    name TEXT NOT NULL,
+    orderIndex INTEGER NOT NULL,
+    isEliminated INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (sessionId) REFERENCES GameSessionEntity(id) ON DELETE CASCADE
+);
+
+-- One round/hand's score for one player
+CREATE TABLE RoundScoreEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    sessionId TEXT NOT NULL,
+    playerId TEXT NOT NULL,
+    roundNumber INTEGER NOT NULL,
+    rawScore INTEGER NOT NULL,        -- points entered for this round (already sign-adjusted)
+    -- optional tag for how the round ended, e.g. "WIN" | "FIRST_DROP" | "MIDDLE_DROP" | "FULL_COUNT" | "NORMAL"
+    outcomeTag TEXT,
+    createdAt INTEGER NOT NULL,
+    FOREIGN KEY (sessionId) REFERENCES GameSessionEntity(id) ON DELETE CASCADE,
+    FOREIGN KEY (playerId) REFERENCES PlayerEntity(id) ON DELETE CASCADE
+);
+
+-- Sessions -------------------------------------------------------------
+
+insertSession:
+INSERT INTO GameSessionEntity(id, gameType, name, createdAt, isFinished, rulesJson)
+VALUES (?, ?, ?, ?, ?, ?);
+
+selectAllSessions:
+SELECT * FROM GameSessionEntity ORDER BY createdAt DESC;
+
+selectSessionById:
+SELECT * FROM GameSessionEntity WHERE id = ?;
+
+markSessionFinished:
+UPDATE GameSessionEntity SET isFinished = 1 WHERE id = ?;
+
+deleteSession:
+DELETE FROM GameSessionEntity WHERE id = ?;
+
+-- Players ----------------------------------------------------------------
+
+insertPlayer:
+INSERT INTO PlayerEntity(id, sessionId, name, orderIndex, isEliminated)
+VALUES (?, ?, ?, ?, 0);
+
+selectPlayersBySession:
+SELECT * FROM PlayerEntity WHERE sessionId = ? ORDER BY orderIndex ASC;
+
+setPlayerEliminated:
+UPDATE PlayerEntity SET isEliminated = ? WHERE id = ?;
+
+-- Round scores -------------------------------------------------------------
+
+insertRoundScore:
+INSERT INTO RoundScoreEntity(id, sessionId, playerId, roundNumber, rawScore, outcomeTag, createdAt)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+selectRoundScoresBySession:
+SELECT * FROM RoundScoreEntity WHERE sessionId = ? ORDER BY roundNumber ASC;
+
+selectRoundScoresForPlayer:
+SELECT * FROM RoundScoreEntity WHERE sessionId = ? AND playerId = ? ORDER BY roundNumber ASC;
+
+deleteRoundScore:
+DELETE FROM RoundScoreEntity WHERE id = ?;
+
+deleteLastRoundForSession:
+DELETE FROM RoundScoreEntity
+WHERE sessionId = ? AND roundNumber = (SELECT MAX(roundNumber) FROM RoundScoreEntity WHERE sessionId = ?);

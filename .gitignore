@@ -1,0 +1,49 @@
+# Gradle / Kotlin
+.gradle/
+build/
+*/build/
+**/build/
+.kotlin/
+local.properties
+
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+.cxx/
+captures/
+*.jks
+*.keystore
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# iOS / Xcode
+iosApp/**/build/
+iosApp/**/DerivedData/
+iosApp/**/*.xcuserstate
+iosApp/**/xcuserdata/
+iosApp/**/*.xcworkspace/xcuserdata/
+Pods/
+# Ignore any *other* generated workspace, but keep the project's own
+# project.xcworkspace (needed to open iosApp.xcodeproj with its scheme).
+*.xcworkspace
+!iosApp/iosApp.xcodeproj/project.xcworkspace
+!iosApp/iosApp.xcodeproj/project.xcworkspace/**
+.swiftpm/
+
+# SQLDelight generated
+**/generated/
+
+# Firebase config (never commit real secrets)
+google-services.json
+GoogleService-Info.plist
+*.env
+
+# Misc
+*.log
+.env.local
