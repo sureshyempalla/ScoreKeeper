@@ -14,17 +14,22 @@ import androidx.navigation.navArgument
 import com.scorekeeper.AppController
 import com.scorekeeper.AuthController
 import com.scorekeeper.app.ui.nav.Screen
-import com.scorekeeper.app.ui.screens.AddPlayersScreen
 import com.scorekeeper.app.ui.screens.ComingSoonScreen
 import com.scorekeeper.app.ui.screens.GamePickerScreen
 import com.scorekeeper.app.ui.screens.HomeScreen
 import com.scorekeeper.app.ui.screens.LoginScreen
+import com.scorekeeper.app.ui.screens.PlayerPickerScreen
+import com.scorekeeper.app.ui.screens.RoundHistoryScreen
 import com.scorekeeper.app.ui.screens.ScoreEntryScreen
+import com.scorekeeper.app.ui.screens.SetupScreen
 import com.scorekeeper.app.ui.screens.SummaryScreen
 import com.scorekeeper.app.ui.theme.ScoreKeeperTheme
 import com.scorekeeper.domain.AuthStatuses
 import com.scorekeeper.domain.GameSession
 import com.scorekeeper.domain.GameType
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 
 @Composable
 fun ScoreKeeperApp(controller: AppController, authController: AuthController) {
@@ -40,6 +45,9 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
     val savedPlayers by controller.savedPlayers.collectAsStateWithLifecycle()
     val authState by authController.uiState.collectAsStateWithLifecycle()
     val activity = LocalContext.current
+    // Hoisted between PlayerPicker -> Setup, since the picked player names
+    // aren't a good fit for a nav-route argument.
+    var pendingPlayerNames by remember { mutableStateOf<List<String>>(emptyList()) }
 
     NavHost(navController = navController, startDestination = Screen.Home.route) {
             composable(Screen.Home.route) {
@@ -89,21 +97,38 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
 
             composable(Screen.GamePicker.route) {
                 GamePickerScreen(
-                    onGameSelected = { game -> navController.navigate(Screen.AddPlayers.build(game.name)) },
+                    onGameSelected = { game -> navController.navigate(Screen.PlayerPicker.build(game.name)) },
                     onBack = { navController.popBackStack() }
                 )
             }
 
             composable(
-                Screen.AddPlayers.route,
+                Screen.PlayerPicker.route,
                 arguments = listOf(navArgument("gameType") { type = NavType.StringType })
             ) { backStackEntry ->
                 val gameType = GameType.valueOf(backStackEntry.arguments?.getString("gameType") ?: GameType.CUSTOM.name)
-                AddPlayersScreen(
+                PlayerPickerScreen(
+                    gameType = gameType,
+                    savedPlayers = savedPlayers,
+                    onBack = { navController.popBackStack() },
+                    onAddSavedPlayer = { name -> controller.addSavedPlayer(name) },
+                    onContinue = { playerNames ->
+                        pendingPlayerNames = playerNames
+                        navController.navigate(Screen.Setup.build(gameType.name))
+                    }
+                )
+            }
+
+            composable(
+                Screen.Setup.route,
+                arguments = listOf(navArgument("gameType") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val gameType = GameType.valueOf(backStackEntry.arguments?.getString("gameType") ?: GameType.CUSTOM.name)
+                SetupScreen(
                     gameType = gameType,
                     onBack = { navController.popBackStack() },
-                    onStart = { sessionName, playerNames, rules ->
-                        controller.startNewGame(gameType, sessionName, playerNames, rules) { sessionId ->
+                    onStart = { sessionName, rules ->
+                        controller.startNewGame(gameType, sessionName, pendingPlayerNames, rules) { sessionId ->
                             navController.navigate(Screen.ScoreEntry.build(sessionId)) {
                                 popUpTo(Screen.Home.route)
                             }
@@ -135,7 +160,22 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                             navController.navigate(Screen.Summary.build(sessionId)) {
                                 popUpTo(Screen.Home.route)
                             }
-                        }
+                        },
+                        onViewHistory = { navController.navigate(Screen.RoundHistory.build(sessionId)) }
+                    )
+                }
+            }
+
+            composable(
+                Screen.RoundHistory.route,
+                arguments = listOf(navArgument("sessionId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
+                val session by watchSessionState(controller, sessionId)
+                session?.let {
+                    RoundHistoryScreen(
+                        session = it,
+                        onBack = { navController.popBackStack() }
                     )
                 }
             }
@@ -153,7 +193,13 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                             navController.navigate(Screen.Home.route) {
                                 popUpTo(Screen.Home.route) { inclusive = true }
                             }
-                        }
+                        },
+                        onRematch = {
+                            navController.navigate(Screen.PlayerPicker.build(it.gameType.name)) {
+                                popUpTo(Screen.Home.route)
+                            }
+                        },
+                        onViewHistory = { navController.navigate(Screen.RoundHistory.build(sessionId)) }
                     )
                 }
             }

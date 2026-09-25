@@ -1,30 +1,30 @@
 package com.scorekeeper.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Undo
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,8 +32,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.scorekeeper.app.ui.theme.AvatarColors
+import com.scorekeeper.app.ui.theme.Border
+import com.scorekeeper.app.ui.theme.Cream
 import com.scorekeeper.app.ui.theme.Danger
+import com.scorekeeper.app.ui.theme.Green
+import com.scorekeeper.app.ui.theme.Muted
 import com.scorekeeper.domain.GameSession
 import com.scorekeeper.domain.GameType
 import com.scorekeeper.domain.Player
@@ -41,14 +49,19 @@ import com.scorekeeper.domain.RoundOutcome
 import com.scorekeeper.scoring.RummyScoringEngine
 import com.scorekeeper.scoring.ScoringEngine
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Score Entry, per the wireframe (ScoreEntry.dc.html): a standings card,
+ * one round-entry card per still-in player with Rummy outcome chips or a
+ * plain points field, and a two-button footer (Finish Game / Submit Round).
+ */
 @Composable
 fun ScoreEntryScreen(
     session: GameSession,
     onBack: () -> Unit,
     onSubmitRound: (Map<String, Pair<Int, RoundOutcome>>) -> Unit,
     onUndo: () -> Unit,
-    onFinish: () -> Unit
+    onFinish: () -> Unit,
+    onViewHistory: () -> Unit
 ) {
     val engine = remember(session.gameType) { ScoringEngine.forGameType(session.gameType) }
     val standings = remember(session) { engine.standings(session.players, session.rounds, session.rules) }
@@ -60,116 +73,160 @@ fun ScoreEntryScreen(
             .associate { it.id to mutableStateOf(RoundOutcome.NORMAL to "") }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(session.name) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Back") }
-                },
-                actions = {
-                    IconButton(onClick = onUndo, enabled = session.rounds.isNotEmpty()) {
-                        Icon(Icons.Filled.Undo, contentDescription = "Undo last round")
-                    }
-                }
+    Column(Modifier.fillMaxSize().background(Cream)) {
+        Row(
+            Modifier.padding(20.dp, 24.dp, 20.dp, 0.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            RoundIconButton(onClick = onBack) { Icon(Icons.Filled.ChevronLeft, contentDescription = "Back") }
+            Text(
+                session.name,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f)
             )
-        },
-        bottomBar = {
-            Column(Modifier.padding(16.dp)) {
-                if (gameOver) {
-                    Button(onClick = onFinish, modifier = Modifier.fillMaxWidth()) {
-                        Text("Finish Game")
-                    }
-                } else {
-                    Button(
-                        onClick = {
-                            val result = entries.mapValues { (_, state) ->
-                                val (outcome, text) = state.value
-                                val raw = if (session.gameType == GameType.RUMMY) {
-                                    RummyScoringEngine.penaltyFor(outcome, session.rules, text.toIntOrNull() ?: 0)
-                                } else {
-                                    text.toIntOrNull() ?: 0
-                                }
-                                raw to outcome
-                            }
-                            onSubmitRound(result)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Submit Round $nextRoundNumber")
+            RoundIconButton(onClick = onUndo, enabled = session.rounds.isNotEmpty()) {
+                Icon(Icons.Filled.Undo, contentDescription = "Undo last round")
+            }
+            RoundIconButton(onClick = onViewHistory) { Icon(Icons.Filled.List, contentDescription = "Score log") }
+        }
+
+        LazyColumn(
+            Modifier.weight(1f).padding(20.dp, 14.dp, 20.dp, 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Surface(shape = RoundedCornerShape(16.dp), color = Color.White, border = BorderStroke(1.dp, Border)) {
+                    Column(Modifier.padding(horizontal = 16.dp)) {
+                        standings.sortedBy { it.rank }.forEachIndexed { index, standing ->
+                            if (index > 0) androidx.compose.material3.HorizontalDivider(color = Color(0xFFF1EDE3))
+                            StandingRow(standing.player, standing.total, standing.rank, standing.isEliminated)
+                        }
                     }
                 }
-            }
-        }
-    ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
-            item {
-                Text("Standings", style = MaterialTheme.typography.titleMedium)
-            }
-            items(standings, key = { it.player.id }) { standing ->
-                StandingRow(standing.player, standing.total, standing.rank, standing.isEliminated)
             }
 
             if (!gameOver) {
                 item {
                     Text(
-                        "Round $nextRoundNumber",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)
+                        "ROUND $nextRoundNumber",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Muted
                     )
                 }
                 items(entries.entries.toList(), key = { it.key }) { (playerId, state) ->
                     val player = session.players.first { it.id == playerId }
-                    RoundEntryRow(
+                    RoundEntryCard(
                         player = player,
                         isRummy = session.gameType == GameType.RUMMY,
                         outcome = state.value.first,
                         text = state.value.second,
+                        rules = session.rules,
                         onOutcomeChange = { state.value = it to state.value.second },
                         onTextChange = { state.value = state.value.first to it }
                     )
                 }
             }
         }
+
+        Row(
+            Modifier.fillMaxWidth().background(Color.White).padding(20.dp, 14.dp, 20.dp, 26.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                onClick = onFinish,
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFFF1EDE3),
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(Modifier.padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+                    Text("Finish Game", fontWeight = FontWeight.SemiBold)
+                }
+            }
+            if (!gameOver) {
+                Button(
+                    onClick = {
+                        val result = entries.mapValues { (_, state) ->
+                            val (outcome, text) = state.value
+                            val raw = if (session.gameType == GameType.RUMMY) {
+                                RummyScoringEngine.penaltyFor(outcome, session.rules, text.toIntOrNull() ?: 0)
+                            } else {
+                                text.toIntOrNull() ?: 0
+                            }
+                            raw to outcome
+                        }
+                        onSubmitRound(result)
+                    },
+                    modifier = Modifier.weight(2f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Green)
+                ) {
+                    Text("Submit Round $nextRoundNumber", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RoundIconButton(onClick: () -> Unit, enabled: Boolean = true, icon: @Composable () -> Unit) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = CircleShape,
+        color = Color.White,
+        border = BorderStroke(1.dp, Border)
+    ) {
+        Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) { icon() }
     }
 }
 
 @Composable
 private fun StandingRow(player: Player, total: Int, rank: Int, eliminated: Boolean) {
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("#$rank", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(end = 8.dp))
         Text(
-            player.name + if (eliminated) " (out)" else "",
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-            color = if (eliminated) Danger else MaterialTheme.colorScheme.onSurface
+            if (eliminated) "OUT" else "#$rank",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (eliminated) Danger else Muted,
+            modifier = Modifier.padding(end = 10.dp)
         )
-        Text("$total pts", style = MaterialTheme.typography.bodyLarge)
+        val color = AvatarColors[player.orderIndex.mod(AvatarColors.size)]
+        Box(
+            Modifier.size(28.dp).clip(CircleShape).background(if (eliminated) Danger else color),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(player.name.take(1).uppercase(), color = Color.White, style = MaterialTheme.typography.labelMedium)
+        }
+        Text(
+            player.name,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f).padding(start = 10.dp),
+            textDecoration = if (eliminated) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+        )
+        Text("$total", style = MaterialTheme.typography.titleSmall, color = if (rank == 1 && !eliminated) Green else MaterialTheme.colorScheme.onSurface)
     }
 }
 
 @Composable
-private fun RoundEntryRow(
+private fun RoundEntryCard(
     player: Player,
     isRummy: Boolean,
     outcome: RoundOutcome,
     text: String,
+    rules: com.scorekeeper.domain.GameRules,
     onOutcomeChange: (RoundOutcome) -> Unit,
     onTextChange: (String) -> Unit
 ) {
-    Card(
-        Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Text(player.name, style = MaterialTheme.typography.titleSmall)
+    Surface(shape = RoundedCornerShape(16.dp), color = Color.White, border = BorderStroke(1.dp, Border)) {
+        Column(Modifier.padding(14.dp)) {
+            Text(player.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             if (isRummy) {
                 Row(
-                    Modifier.padding(top = 8.dp),
+                    Modifier.padding(top = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     RummyChip("Win", outcome == RoundOutcome.WIN) { onOutcomeChange(RoundOutcome.WIN) }
@@ -177,20 +234,27 @@ private fun RoundEntryRow(
                     RummyChip("Mid Drop", outcome == RoundOutcome.MIDDLE_DROP) { onOutcomeChange(RoundOutcome.MIDDLE_DROP) }
                     RummyChip("Full Count", outcome == RoundOutcome.FULL_COUNT) { onOutcomeChange(RoundOutcome.FULL_COUNT) }
                 }
-                if (outcome == RoundOutcome.NORMAL || outcome == RoundOutcome.WIN) {
-                    OutlinedTextField(
-                        value = text,
-                        onValueChange = onTextChange,
-                        label = { Text(if (outcome == RoundOutcome.WIN) "Points (usually 0)" else "Deadwood points") },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                    )
+                when (outcome) {
+                    RoundOutcome.FIRST_DROP -> PenaltyNote("Penalty auto-applied: ${rules.rummyFirstDropPenalty} pts")
+                    RoundOutcome.MIDDLE_DROP -> PenaltyNote("Penalty auto-applied: ${rules.rummyMiddleDropPenalty} pts")
+                    RoundOutcome.FULL_COUNT -> PenaltyNote("Penalty auto-applied: ${rules.rummyFullCountPenalty} pts")
+                    else -> {
+                        OutlinedTextField(
+                            value = text,
+                            onValueChange = onTextChange,
+                            label = { Text(if (outcome == RoundOutcome.WIN) "Points (usually 0)" else "Deadwood points") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+                        )
+                    }
                 }
             } else {
                 OutlinedTextField(
                     value = text,
                     onValueChange = onTextChange,
                     label = { Text("Points this round") },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
                 )
             }
         }
@@ -198,17 +262,27 @@ private fun RoundEntryRow(
 }
 
 @Composable
+private fun PenaltyNote(text: String) {
+    Box(
+        Modifier.fillMaxWidth().padding(top = 10.dp).background(Color(0xFFF1EDE3), RoundedCornerShape(10.dp)).padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Text(text, style = MaterialTheme.typography.labelMedium, color = Muted)
+    }
+}
+
+@Composable
 private fun RummyChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    AssistChip(
+    Surface(
         onClick = onClick,
-        label = { Text(label) },
-        colors = if (selected) {
-            AssistChipDefaults.assistChipColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                labelColor = MaterialTheme.colorScheme.onPrimary
-            )
-        } else {
-            AssistChipDefaults.assistChipColors()
-        }
-    )
+        shape = CircleShape,
+        color = if (selected) Green else Color(0xFFF1EDE3)
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+        )
+    }
 }
