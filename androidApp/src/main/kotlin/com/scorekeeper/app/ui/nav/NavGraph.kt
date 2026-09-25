@@ -40,6 +40,15 @@ sealed class Screen(val route: String) {
     object AddParticipants : Screen("add_participants/{gameId}") {
         fun build(gameId: String) = "add_participants/$gameId"
     }
+    /**
+     * Team-sport games (Volleyball etc.): one route hosts Teams -> Groups ->
+     * Standings -> (knockout) Bracket as a single state-driven flow, switching
+     * which screen it renders as the game's entrants/matches change, rather
+     * than four separate routes the caller has to know how to sequence.
+     */
+    object VolleyballFlow : Screen("volleyball_flow/{gameId}") {
+        fun build(gameId: String) = "volleyball_flow/$gameId"
+    }
     object BracketView : Screen("bracket_view/{gameId}") {
         fun build(gameId: String) = "bracket_view/$gameId"
     }

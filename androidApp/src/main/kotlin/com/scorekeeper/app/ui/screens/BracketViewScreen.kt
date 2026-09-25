@@ -103,7 +103,11 @@ fun BracketViewScreen(
                 }
                 item { StandingsTable(standings) }
             } else {
-                val roundsInOrder = game.matches.groupBy { it.roundLabel }
+                // Group-stage matches (roundLabel "Group A", "Group B", ...) belong to the
+                // dedicated Volleyball Standings screen, not this knockout-bracket view --
+                // exclude them here so a GROUP_STAGE_THEN_KNOCKOUT game's bracket view (shown
+                // once playoffs start) only shows the knockout rounds.
+                val roundsInOrder = game.matches.filterNot { it.roundLabel.startsWith("Group ") }.groupBy { it.roundLabel }
                     .entries.sortedByDescending { it.value.size }
                 items(roundsInOrder.toList()) { (label, matches) ->
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

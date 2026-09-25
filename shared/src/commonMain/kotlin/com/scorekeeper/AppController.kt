@@ -207,4 +207,39 @@ class AppController(private val repository: GameRepository) {
     fun standingsFor(game: EventGame): List<EntrantStanding> = EventStandings.compute(game)
 
     fun championFor(game: EventGame) = EventStandings.champion(game)
+
+    // --- Team-sport flow (Volleyball etc.) ---
+
+    fun addTeam(gameId: String, teamName: String, roster: List<String>, onAdded: () -> Unit = {}) {
+        scope.launch { repository.addTeam(gameId, teamName, roster); onAdded() }
+    }
+
+    fun updateTeamRoster(entrantId: String, roster: List<String>) {
+        scope.launch { repository.updateTeamRoster(entrantId, roster) }
+    }
+
+    fun removeTeam(entrantId: String) {
+        scope.launch { repository.removeTeam(entrantId) }
+    }
+
+    fun autoAssignGroups(gameId: String, groupCount: Int) {
+        scope.launch { repository.autoAssignGroups(gameId, groupCount) }
+    }
+
+    fun moveEntrantToGroup(entrantId: String, groupLabel: String) {
+        scope.launch { repository.moveEntrantToGroup(entrantId, groupLabel) }
+    }
+
+    fun startGroupStageDraw(gameId: String, onStarted: () -> Unit = {}) {
+        scope.launch { repository.startGroupStageDraw(gameId); onStarted() }
+    }
+
+    fun advanceToPlayoffs(gameId: String, onAdvanced: () -> Unit = {}) {
+        scope.launch { repository.advanceToPlayoffs(gameId); onAdvanced() }
+    }
+
+    fun groupLabelsFor(game: EventGame): List<String> = EventStandings.groupLabels(game)
+
+    fun groupStandingsFor(game: EventGame, groupLabel: String): List<EntrantStanding> =
+        EventStandings.groupStandings(game, groupLabel)
 }

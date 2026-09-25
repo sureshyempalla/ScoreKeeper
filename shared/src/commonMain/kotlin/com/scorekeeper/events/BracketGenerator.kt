@@ -22,9 +22,34 @@ import com.scorekeeper.domain.TournamentFormat
 object BracketGenerator {
 
     fun generate(format: TournamentFormat, entrants: List<EventEntrant>): List<EventMatch> = when (format) {
-        TournamentFormat.ROUND_ROBIN -> generateRoundRobin(entrants)
-        TournamentFormat.SINGLE_ELIMINATION, TournamentFormat.DOUBLE_ELIMINATION -> generateElimination(entrants)
+        TournamentFormat.ROUND_ROBIN -> generateRoundRobin(entrants, "Round Robin", 0)
+        TournamentFormat.SINGLE_ELIMINATION, TournamentFormat.DOUBLE_ELIMINATION -> generateElimination(entrants, 0)
+        TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT -> emptyList() // built by generateGroupStage + the knockout call below instead
     }
+
+    /**
+     * One round-robin schedule per group (e.g. Group A's teams play each other,
+     * Group B's teams play each other, nobody crosses groups) -- the first half
+     * of [TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT]. [groups] maps each group's
+     * label ("A", "B", ...) to its entrants; matchIndex runs continuously across
+     * every group's matches so they sort predictably once stored together.
+     */
+    fun generateGroupStage(groups: Map<String, List<EventEntrant>>): List<EventMatch> {
+        var nextIndex = 0
+        return groups.toSortedMap().flatMap { (label, entrants) ->
+            val matches = generateRoundRobin(entrants, "Group $label", nextIndex)
+            nextIndex += matches.size
+            matches
+        }
+    }
+
+    /**
+     * The knockout half of [TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT]: a normal
+     * single-elimination bracket over the qualifiers, with matchIndex continuing
+     * on from [startIndex] so its matches sort after the group stage's.
+     */
+    fun generateKnockout(qualifiers: List<EventEntrant>, startIndex: Int): List<EventMatch> =
+        generateElimination(qualifiers, startIndex)
 
     private fun nextPowerOfTwo(n: Int): Int {
         var size = 1
@@ -39,7 +64,7 @@ object BracketGenerator {
         else -> "Round $roundNumber"
     }
 
-    private fun generateElimination(entrants: List<EventEntrant>): List<EventMatch> {
+    private fun generateElimination(entrants: List<EventEntrant>, startIndex: Int): List<EventMatch> {
         if (entrants.isEmpty()) return emptyList()
         val shuffled = entrants.shuffled()
         val size = nextPowerOfTwo(maxOf(2, shuffled.size))
@@ -63,7 +88,7 @@ object BracketGenerator {
                     EventMatch(
                         id = id,
                         roundLabel = label,
-                        matchIndex = index,
+                        matchIndex = startIndex + index,
                         entrantAId = a?.id,
                         entrantBId = b?.id,
                         scoreA = 0,
@@ -145,15 +170,15 @@ object BracketGenerator {
         return rounds
     }
 
-    private fun generateRoundRobin(entrants: List<EventEntrant>): List<EventMatch> {
+    private fun generateRoundRobin(entrants: List<EventEntrant>, label: String, startIndex: Int): List<EventMatch> {
         val list = entrants
         val matches = mutableListOf<EventMatch>()
-        var index = 0
+        var index = startIndex
         for (i in list.indices) {
             for (j in i + 1 until list.size) {
                 matches += EventMatch(
                     id = newId(),
-                    roundLabel = "Round Robin",
+                    roundLabel = label,
                     matchIndex = index++,
                     entrantAId = list[i].id,
                     entrantBId = list[j].id,

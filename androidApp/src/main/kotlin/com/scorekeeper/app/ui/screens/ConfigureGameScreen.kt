@@ -38,12 +38,19 @@ import com.scorekeeper.app.ui.theme.Cream
 import com.scorekeeper.app.ui.theme.Green
 import com.scorekeeper.app.ui.theme.Muted
 import com.scorekeeper.domain.EventTeamMode
+import com.scorekeeper.domain.SportRules
 import com.scorekeeper.domain.TournamentFormat
 
 /**
  * Configure Game, per the wireframe (ConfigureGame.dc.html): tournament
  * format (radio-style cards), team mode (segmented control), and a players-
  * per-team stepper shown only for Doubles/Teams.
+ *
+ * Sports with real team-sport rules ([SportRules.usesGroupStage], e.g.
+ * Volleyball) skip this generic picker entirely: the format is forced to
+ * [TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT] and team mode to
+ * [EventTeamMode.TEAMS], and the flow continues into the dedicated
+ * Teams/Groups/Standings screens instead of the generic Add Participants one.
  */
 @Composable
 fun ConfigureGameScreen(
@@ -52,9 +59,11 @@ fun ConfigureGameScreen(
     onBack: () -> Unit,
     onContinue: (format: TournamentFormat, teamMode: EventTeamMode, playersPerTeam: Int) -> Unit
 ) {
-    var format by remember { mutableStateOf(TournamentFormat.SINGLE_ELIMINATION) }
-    var teamMode by remember { mutableStateOf(EventTeamMode.SINGLES) }
-    var playersPerTeam by remember { mutableStateOf(2) }
+    val minTeamSize = SportRules.minTeamSize(sportName)
+    val isTeamSport = minTeamSize != null
+    var format by remember { mutableStateOf(if (isTeamSport) TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT else TournamentFormat.SINGLE_ELIMINATION) }
+    var teamMode by remember { mutableStateOf(if (isTeamSport) EventTeamMode.TEAMS else EventTeamMode.SINGLES) }
+    var playersPerTeam by remember { mutableStateOf(minTeamSize ?: 2) }
 
     Column(Modifier.fillMaxSize().background(Cream)) {
         Row(
@@ -70,6 +79,24 @@ fun ConfigureGameScreen(
             Text("$emoji $sportName Setup", style = MaterialTheme.typography.headlineSmall)
         }
 
+        if (isTeamSport) {
+            LazyColumn(
+                Modifier.weight(1f).padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(22.dp)
+            ) {
+                item {
+                    Surface(shape = RoundedCornerShape(14.dp), color = Color.White, border = BorderStroke(1.dp, Border)) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Team Sport", style = MaterialTheme.typography.labelMedium, color = Muted)
+                            Text(
+                                "$sportName is played in teams of at least $minTeamSize. Next you'll add teams and their rosters, split them into groups, and play a round-robin group stage before knockout playoffs decide the champion.",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
         LazyColumn(
             Modifier.weight(1f).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(22.dp)
@@ -134,6 +161,7 @@ fun ConfigureGameScreen(
                     )
                 }
             }
+        }
         }
 
         Column(Modifier.fillMaxWidth().background(Color.White).padding(20.dp, 14.dp, 20.dp, 26.dp)) {

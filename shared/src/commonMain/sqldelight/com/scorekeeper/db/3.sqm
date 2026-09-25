@@ -1,0 +1,10 @@
+-- Adds team rosters and group-stage support to EventEntrantEntity (see
+-- ScoreKeeper.sq). Existing installs are on schema version 3 (after 2.sqm's
+-- Community Events tables) and don't have these columns yet; this migration
+-- brings them to version 4 without touching any existing event/game data.
+-- Both columns are optional (roster defaults to empty, groupLabel to NULL),
+-- so every entrant created before this migration keeps working exactly as
+-- a non-team, non-grouped entrant.
+
+ALTER TABLE EventEntrantEntity ADD COLUMN roster TEXT NOT NULL DEFAULT '';
+ALTER TABLE EventEntrantEntity ADD COLUMN groupLabel TEXT;

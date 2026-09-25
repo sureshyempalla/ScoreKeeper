@@ -15,7 +15,37 @@ import kotlinx.serialization.Serializable
 enum class TournamentFormat(val displayName: String, val blurb: String) {
     SINGLE_ELIMINATION("Single Elimination", "Lose once, you're out. Fastest format, works well with limited time."),
     DOUBLE_ELIMINATION("Double Elimination", "Need to lose twice to be out. Fairer, takes longer to play out."),
-    ROUND_ROBIN("Round Robin", "Everyone plays everyone, ranked by wins. Best for small groups.")
+    ROUND_ROBIN("Round Robin", "Everyone plays everyone, ranked by wins. Best for small groups."),
+
+    /**
+     * Teams are split into groups, play round robin within their own group,
+     * then the top entrants from each group advance into a single-elimination
+     * knockout bracket. This is the real format used by multi-team sports
+     * like volleyball, not something the player picks from the generic format
+     * list -- [SportRules] decides when a sport uses it, and the app routes
+     * to the dedicated Teams/Groups/Standings screens
+     * instead of the generic AddParticipants/BracketView ones while it's set.
+     */
+    GROUP_STAGE_THEN_KNOCKOUT(
+        "Group Stage + Playoffs",
+        "Teams play round robin within their group, then the top teams advance to a knockout bracket."
+    )
+}
+
+/**
+ * Per-sport rules that shape the Teams/Groups flow (currently just the
+ * minimum roster size a team needs). Keyed by sport name, case-insensitively,
+ * so a new team sport is a one-line addition here rather than a new screen.
+ */
+object SportRules {
+    private val minTeamSizeBySport = mapOf(
+        "volleyball" to 6
+    )
+
+    /** Null means this sport has no team-sport rules (e.g. it isn't played in teams+groups). */
+    fun minTeamSize(sportName: String): Int? = minTeamSizeBySport[sportName.trim().lowercase()]
+
+    fun usesGroupStage(sportName: String): Boolean = minTeamSize(sportName) != null
 }
 
 @Serializable
@@ -51,7 +81,11 @@ data class EventEntrant(
     val id: String,
     val name: String,
     val colorIndex: Int,
-    val seed: Int
+    val seed: Int,
+    /** Non-empty only for team-sport entrants (e.g. Volleyball's team rosters). */
+    val roster: List<String> = emptyList(),
+    /** Which group ("A", "B", ...) this entrant was placed in for a group-stage game; null otherwise. */
+    val groupLabel: String? = null
 )
 
 @Serializable

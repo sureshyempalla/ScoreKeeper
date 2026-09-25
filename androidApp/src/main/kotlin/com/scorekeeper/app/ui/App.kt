@@ -36,6 +36,9 @@ import com.scorekeeper.app.ui.screens.RoundHistoryScreen
 import com.scorekeeper.app.ui.screens.ScoreEntryScreen
 import com.scorekeeper.app.ui.screens.SetupScreen
 import com.scorekeeper.app.ui.screens.SummaryScreen
+import com.scorekeeper.app.ui.screens.VolleyballGroupsScreen
+import com.scorekeeper.app.ui.screens.VolleyballStandingsScreen
+import com.scorekeeper.app.ui.screens.VolleyballTeamsScreen
 import com.scorekeeper.app.ui.theme.Cream
 import com.scorekeeper.app.ui.theme.ScoreKeeperTheme
 import com.scorekeeper.domain.AuthStatuses
@@ -44,6 +47,8 @@ import com.scorekeeper.domain.EventGame
 import com.scorekeeper.domain.EventTeamMode
 import com.scorekeeper.domain.GameSession
 import com.scorekeeper.domain.GameType
+import com.scorekeeper.domain.SportRules
+import com.scorekeeper.domain.TournamentFormat
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -287,7 +292,13 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                         games = games,
                         onBack = { navController.popBackStack() },
                         onAddGame = { navController.navigate(Screen.AddSport.build(eventId)) },
-                        onOpenGame = { game -> navController.navigate(Screen.BracketView.build(game.id)) },
+                        onOpenGame = { game ->
+                        if (game.format == TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT) {
+                            navController.navigate(Screen.VolleyballFlow.build(game.id))
+                        } else {
+                            navController.navigate(Screen.BracketView.build(game.id))
+                        }
+                    },
                         onViewResults = { navController.navigate(Screen.EventResults.build(eventId)) }
                     )
                 }
@@ -319,7 +330,13 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                     onBack = { navController.popBackStack() },
                     onContinue = { format, teamMode, playersPerTeam ->
                         controller.addEventGame(eventId, pendingSportName, pendingSportEmoji, format, teamMode, playersPerTeam) { gameId ->
-                            navController.navigate(Screen.AddParticipants.build(gameId))
+                            if (format == TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT) {
+                                navController.navigate(Screen.VolleyballFlow.build(gameId)) {
+                                    popUpTo(Screen.EventDashboard.build(eventId))
+                                }
+                            } else {
+                                navController.navigate(Screen.AddParticipants.build(gameId))
+                            }
                         }
                     }
                 )
@@ -348,6 +365,81 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                         }
                     }
                 )
+            }
+
+            composable(
+                Screen.VolleyballFlow.route,
+                arguments = listOf(navArgument("gameId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val gameId = backStackEntry.arguments?.getString("gameId") ?: return@composable
+                val game by watchEventGameDetailState(controller, gameId)
+                game?.let { g ->
+                    val minTeamSize = SportRules.minTeamSize(g.sportName) ?: 6
+                    // Groups aren't assigned until the organizer taps "Continue to Groups" on the
+                    // Teams screen (autoAssignGroups labels every entrant at once), so "no entrant
+                    // has a groupLabel yet" is what actually distinguishes "still adding teams"
+                    // from "teams done, ready to arrange groups" -- entrants.isEmpty() alone would
+                    // jump straight to the Groups screen the moment the very first team is added.
+                    val anyGroupAssigned = g.entrants.any { it.groupLabel != null }
+                    val groupStageMatches = g.matches.filter { it.roundLabel.startsWith("Group ") }
+                    val knockoutMatches = g.matches.filterNot { it.roundLabel.startsWith("Group ") }
+
+                    // State-driven flow: which stage to show falls out of the game's actual
+                    // entrants/matches, not a separately tracked "step" -- so re-entering this
+                    // route (from EventDashboard's onOpenGame, or after the app is killed and
+                    // restarted) always lands on the right stage automatically.
+                    when {
+                        g.entrants.isEmpty() || !anyGroupAssigned -> VolleyballTeamsScreen(
+                            sportName = g.sportName,
+                            emoji = g.emoji,
+                            minTeamSize = minTeamSize,
+                            teams = g.entrants,
+                            onBack = { navController.popBackStack() },
+                            onAddTeam = { name, roster -> controller.addTeam(gameId, name, roster) },
+                            onRemoveTeam = { entrantId -> controller.removeTeam(entrantId) },
+                            onContinue = {
+                                val suggestedGroups = if (g.entrants.size <= 4) 1 else (g.entrants.size + 3) / 4
+                                controller.autoAssignGroups(gameId, maxOf(2, suggestedGroups))
+                            }
+                        )
+
+                        g.matches.isEmpty() -> {
+                            val currentGroupCount = g.entrants.mapNotNull { it.groupLabel }.distinct().size
+                                .coerceAtLeast(2)
+                            VolleyballGroupsScreen(
+                                sportName = g.sportName,
+                                emoji = g.emoji,
+                                teams = g.entrants,
+                                groupCount = currentGroupCount,
+                                onGroupCountChange = { newCount -> controller.autoAssignGroups(gameId, newCount) },
+                                onMoveTeam = { entrantId, groupLabel -> controller.moveEntrantToGroup(entrantId, groupLabel) },
+                                onBack = { navController.popBackStack() },
+                                onConfirm = { controller.startGroupStageDraw(gameId) }
+                            )
+                        }
+
+                        knockoutMatches.isEmpty() -> VolleyballStandingsScreen(
+                            sportName = g.sportName,
+                            emoji = g.emoji,
+                            groupLabels = controller.groupLabelsFor(g),
+                            entrants = g.entrants,
+                            matches = groupStageMatches,
+                            standingsForGroup = { label -> controller.groupStandingsFor(g, label) },
+                            onBack = { navController.popBackStack() },
+                            onOpenMatch = { match -> navController.navigate(Screen.MatchScore.build(gameId, match.id)) },
+                            onAdvance = { controller.advanceToPlayoffs(gameId) }
+                        )
+
+                        else -> BracketViewScreen(
+                            game = g,
+                            standings = controller.standingsFor(g),
+                            champion = controller.championFor(g),
+                            onBack = { navController.popBackStack() },
+                            onReshuffle = { /* no-op: re-shuffling a group-stage bracket isn't supported */ },
+                            onOpenMatch = { match -> navController.navigate(Screen.MatchScore.build(gameId, match.id)) }
+                        )
+                    }
+                }
             }
 
             composable(

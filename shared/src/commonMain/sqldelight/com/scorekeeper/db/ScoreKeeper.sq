@@ -75,6 +75,10 @@ CREATE TABLE EventEntrantEntity (
     name TEXT NOT NULL,
     colorIndex INTEGER NOT NULL,
     seed INTEGER NOT NULL,
+    -- Team-sport roster (e.g. Volleyball), player names joined with \u0001; empty for non-team entrants.
+    roster TEXT NOT NULL DEFAULT '',
+    -- Group-stage group label ("A", "B", ...); NULL for non-group-stage games.
+    groupLabel TEXT,
     FOREIGN KEY (eventGameId) REFERENCES EventGameEntity(id) ON DELETE CASCADE
 );
 
@@ -189,14 +193,26 @@ UPDATE EventGameEntity SET status = ? WHERE id = ?;
 -- Event entrants -----------------------------------------------------------
 
 insertEntrant:
-INSERT INTO EventEntrantEntity(id, eventGameId, name, colorIndex, seed)
-VALUES (?, ?, ?, ?, ?);
+INSERT INTO EventEntrantEntity(id, eventGameId, name, colorIndex, seed, roster, groupLabel)
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
 selectEntrantsByGame:
 SELECT * FROM EventEntrantEntity WHERE eventGameId = ? ORDER BY seed ASC;
 
+selectEntrantById:
+SELECT * FROM EventEntrantEntity WHERE id = ?;
+
+updateEntrantRoster:
+UPDATE EventEntrantEntity SET roster = ? WHERE id = ?;
+
+updateEntrantGroup:
+UPDATE EventEntrantEntity SET groupLabel = ? WHERE id = ?;
+
 deleteEntrantsByGame:
 DELETE FROM EventEntrantEntity WHERE eventGameId = ?;
+
+deleteEntrant:
+DELETE FROM EventEntrantEntity WHERE id = ?;
 
 -- Event matches --------------------------------------------------------------
 

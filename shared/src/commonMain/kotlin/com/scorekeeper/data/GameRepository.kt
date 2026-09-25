@@ -28,6 +28,7 @@ import com.scorekeeper.domain.RoundScore
 import com.scorekeeper.domain.SavedPlayer
 import com.scorekeeper.domain.TournamentFormat
 import com.scorekeeper.events.BracketGenerator
+import com.scorekeeper.events.EventStandings
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +42,9 @@ import kotlinx.serialization.json.Json
 import kotlin.random.Random
 
 private val json = Json { ignoreUnknownKeys = true }
+
+/** Separator for EventEntrantEntity.roster -- \u0001 so a player's own name can never contain it. */
+private const val ROSTER_SEPARATOR = "\u0001"
 
 /** Simple, dependency-free unique id — good enough for local-only rows. */
 fun newId(): String {
@@ -247,12 +251,17 @@ class GameRepository(
         q.deleteEntrantsByGame(gameId)
         val entrants = names.mapIndexed { index, name ->
             val id = newId()
-            q.insertEntrant(id = id, eventGameId = gameId, name = name, colorIndex = index.toLong(), seed = index.toLong())
+            q.insertEntrant(id = id, eventGameId = gameId, name = name, colorIndex = index.toLong(), seed = index.toLong(), roster = "", groupLabel = null)
             EventEntrant(id = id, name = name, colorIndex = index, seed = index)
         }
         val game = q.selectGameById(gameId).executeAsOne()
         val format = TournamentFormat.valueOf(game.format)
         val matches = BracketGenerator.generate(format, entrants)
+        insertMatches(gameId, matches)
+        q.updateGameStatus(EventGameStatus.DRAW_READY.name, gameId)
+    }
+
+    private fun insertMatches(gameId: String, matches: List<EventMatch>) {
         matches.forEach { m ->
             q.insertMatch(
                 id = m.id,
@@ -269,7 +278,86 @@ class GameRepository(
                 nextMatchSlot = m.nextMatchSlot?.toLong()
             )
         }
+    }
+
+    // --- Team-sport flow (Volleyball etc.): teams with rosters -> groups -> group-stage round
+    // robin -> knockout playoffs. Kept separate from generateDraw's individual-entrant path
+    // above since teams are added one at a time with a roster, not all at once from a name list.
+
+    /** Adds one team (an entrant with a roster) to a team-sport game; returns its new entrant id. */
+    suspend fun addTeam(gameId: String, teamName: String, roster: List<String>): String = withContext(ioDispatcher) {
+        val id = newId()
+        val nextSeed = q.selectEntrantsByGame(gameId).executeAsList().size
+        q.insertEntrant(
+            id = id,
+            eventGameId = gameId,
+            name = teamName,
+            colorIndex = nextSeed.toLong(),
+            seed = nextSeed.toLong(),
+            roster = roster.joinToString(ROSTER_SEPARATOR),
+            groupLabel = null
+        )
+        id
+    }
+
+    suspend fun updateTeamRoster(entrantId: String, roster: List<String>) = withContext(ioDispatcher) {
+        q.updateEntrantRoster(roster.joinToString(ROSTER_SEPARATOR), entrantId)
+    }
+
+    suspend fun removeTeam(entrantId: String) = withContext(ioDispatcher) {
+        q.deleteEntrant(entrantId)
+    }
+
+    /**
+     * Splits a game's current entrants into [groupCount] groups as evenly as
+     * possible (e.g. 9 teams into 2 groups -> 5/4), persisting the suggested
+     * groupLabel on every entrant. Callers (the Groups screen) can move any
+     * entrant to a different group afterward with [moveEntrantToGroup] before
+     * confirming; calling this again re-suggests from scratch.
+     */
+    suspend fun autoAssignGroups(gameId: String, groupCount: Int) = withContext(ioDispatcher) {
+        val entrants = q.selectEntrantsByGame(gameId).executeAsList()
+        val labels = ('A' until 'A' + groupCount).map { it.toString() }
+        // Deal entrants round-robin-style across the groups so an uneven split
+        // spreads the extra teams across different groups rather than dumping
+        // them all into the first one.
+        entrants.forEachIndexed { index, entrant ->
+            q.updateEntrantGroup(labels[index % labels.size], entrant.id)
+        }
+    }
+
+    suspend fun moveEntrantToGroup(entrantId: String, groupLabel: String) = withContext(ioDispatcher) {
+        q.updateEntrantGroup(groupLabel, entrantId)
+    }
+
+    /** Generates each group's round-robin schedule and moves the game into its group stage. */
+    suspend fun startGroupStageDraw(gameId: String) = withContext(ioDispatcher) {
+        q.deleteMatchesByGame(gameId)
+        val entrants = q.selectEntrantsByGame(gameId).executeAsList().map { it.toDomain() }
+        val groups = entrants.filter { it.groupLabel != null }.groupBy { it.groupLabel!! }
+        val matches = BracketGenerator.generateGroupStage(groups)
+        insertMatches(gameId, matches)
         q.updateGameStatus(EventGameStatus.DRAW_READY.name, gameId)
+    }
+
+    /**
+     * Takes the top [perGroup] entrants (by [com.scorekeeper.events.EventStandings.groupStandings])
+     * from every group, seeds them into a fresh single-elimination bracket appended after the
+     * group-stage matches, and moves the game into its knockout phase.
+     */
+    suspend fun advanceToPlayoffs(gameId: String, perGroup: Int = 2) = withContext(ioDispatcher) {
+        val gameRow = q.selectGameById(gameId).executeAsOne()
+        val entrants = q.selectEntrantsByGame(gameId).executeAsList().map { it.toDomain() }
+        val existingMatches = q.selectMatchesByGame(gameId).executeAsList().map { it.toDomain() }
+        val game = gameRow.toDomainShallow().copy(entrants = entrants, matches = existingMatches)
+        val groups = EventStandings.groupLabels(game)
+        val qualifiers = groups.flatMap { label ->
+            EventStandings.groupStandings(game, label).take(perGroup).map { it.entrant }
+        }
+        val startIndex = (existingMatches.maxOfOrNull { it.matchIndex } ?: -1) + 1
+        val knockoutMatches = BracketGenerator.generateKnockout(qualifiers, startIndex)
+        insertMatches(gameId, knockoutMatches)
+        q.updateGameStatus(EventGameStatus.IN_PROGRESS.name, gameId)
     }
 
     suspend fun saveMatchProgress(matchId: String, scoreA: Int, scoreB: Int) = withContext(ioDispatcher) {
@@ -334,7 +422,9 @@ class GameRepository(
         id = id,
         name = name,
         colorIndex = colorIndex.toInt(),
-        seed = seed.toInt()
+        seed = seed.toInt(),
+        roster = if (roster.isBlank()) emptyList() else roster.split(ROSTER_SEPARATOR).filter { it.isNotBlank() },
+        groupLabel = groupLabel
     )
 
     private fun EventMatchEntity.toDomain(): EventMatch = EventMatch(
