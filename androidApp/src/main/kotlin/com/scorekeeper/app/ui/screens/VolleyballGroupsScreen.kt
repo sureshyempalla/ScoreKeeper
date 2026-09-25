@@ -57,6 +57,7 @@ fun VolleyballGroupsScreen(
     onGroupCountChange: (Int) -> Unit,
     onMoveTeam: (entrantId: String, groupLabel: String) -> Unit,
     onBack: () -> Unit,
+    onEditTeams: () -> Unit,
     onConfirm: () -> Unit
 ) {
     val allLabels = ('A' until 'A' + groupCount).map { it.toString() }
@@ -73,7 +74,12 @@ fun VolleyballGroupsScreen(
                     Icon(Icons.Filled.ChevronLeft, contentDescription = "Back")
                 }
             }
-            Text("$emoji $sportName Groups", style = MaterialTheme.typography.headlineSmall)
+            Column(Modifier.weight(1f)) {
+                Text("$emoji $sportName Groups", style = MaterialTheme.typography.headlineSmall)
+            }
+            TextButton(onClick = onEditTeams) {
+                Text("Edit Teams", color = Green, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelMedium)
+            }
         }
 
         Row(
@@ -84,9 +90,14 @@ fun VolleyballGroupsScreen(
         ) {
             Text("Number of groups", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StepperDot("−") { if (groupCount > 2) onGroupCountChange(groupCount - 1) }
+                // Bounds: at least 1 group, at most one group per 2 teams (keeps every
+                // group at 2+ teams). With few teams this previously pinned min==max at
+                // a hardcoded 2, so neither button could ever do anything -- the reported
+                // "+/- doesn't visibly change the number" bug.
+                val maxGroups = maxOf(1, teams.size / 2)
+                StepperDot("−") { if (groupCount > 1) onGroupCountChange(groupCount - 1) }
                 Text(groupCount.toString(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                StepperDot("+") { if (groupCount < teams.size / 2) onGroupCountChange(groupCount + 1) }
+                StepperDot("+") { if (groupCount < maxGroups) onGroupCountChange(groupCount + 1) }
             }
         }
 

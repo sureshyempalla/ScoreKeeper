@@ -299,6 +299,7 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                             navController.navigate(Screen.BracketView.build(game.id))
                         }
                     },
+                        onEditGame = { game -> navController.navigate(Screen.EditGame.build(game.id)) },
                         onViewResults = { navController.navigate(Screen.EventResults.build(eventId)) }
                     )
                 }
@@ -328,7 +329,7 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                     sportName = pendingSportName,
                     emoji = pendingSportEmoji,
                     onBack = { navController.popBackStack() },
-                    onContinue = { format, teamMode, playersPerTeam ->
+                    onContinue = { _, _, format, teamMode, playersPerTeam ->
                         controller.addEventGame(eventId, pendingSportName, pendingSportEmoji, format, teamMode, playersPerTeam) { gameId ->
                             if (format == TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT) {
                                 navController.navigate(Screen.VolleyballFlow.build(gameId)) {
@@ -340,6 +341,34 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                         }
                     }
                 )
+            }
+
+            composable(
+                Screen.EditGame.route,
+                arguments = listOf(navArgument("gameId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val gameId = backStackEntry.arguments?.getString("gameId") ?: return@composable
+                val game by watchEventGameDetailState(controller, gameId)
+                game?.let { g ->
+                    ConfigureGameScreen(
+                        sportName = g.sportName,
+                        emoji = g.emoji,
+                        isEditing = true,
+                        locked = g.entrants.isNotEmpty(),
+                        initialFormat = g.format,
+                        initialTeamMode = g.teamMode,
+                        initialPlayersPerTeam = g.playersPerTeam,
+                        onBack = { navController.popBackStack() },
+                        onDelete = {
+                            controller.deleteEventGame(gameId) { navController.popBackStack() }
+                        },
+                        onContinue = { newSportName, newEmoji, format, teamMode, playersPerTeam ->
+                            controller.updateEventGameConfig(gameId, newSportName, newEmoji, format, teamMode, playersPerTeam) {
+                                navController.popBackStack()
+                            }
+                        }
+                    )
+                }
             }
 
             composable(
@@ -396,16 +425,20 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                             teams = g.entrants,
                             onBack = { navController.popBackStack() },
                             onAddTeam = { name, roster -> controller.addTeam(gameId, name, roster) },
+                            onUpdateTeam = { entrantId, name, roster -> controller.updateTeam(entrantId, name, roster) },
                             onRemoveTeam = { entrantId -> controller.removeTeam(entrantId) },
                             onContinue = {
+                                // Same bounds as the Groups screen's own stepper (see there for why):
+                                // at least 1 group, at most one group per 2 teams.
+                                val maxGroups = maxOf(1, g.entrants.size / 2)
                                 val suggestedGroups = if (g.entrants.size <= 4) 1 else (g.entrants.size + 3) / 4
-                                controller.autoAssignGroups(gameId, maxOf(2, suggestedGroups))
+                                controller.autoAssignGroups(gameId, suggestedGroups.coerceIn(1, maxGroups))
                             }
                         )
 
                         g.matches.isEmpty() -> {
                             val currentGroupCount = g.entrants.mapNotNull { it.groupLabel }.distinct().size
-                                .coerceAtLeast(2)
+                                .coerceAtLeast(1)
                             VolleyballGroupsScreen(
                                 sportName = g.sportName,
                                 emoji = g.emoji,
@@ -414,6 +447,7 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                                 onGroupCountChange = { newCount -> controller.autoAssignGroups(gameId, newCount) },
                                 onMoveTeam = { entrantId, groupLabel -> controller.moveEntrantToGroup(entrantId, groupLabel) },
                                 onBack = { navController.popBackStack() },
+                                onEditTeams = { controller.resetGroups(gameId) },
                                 onConfirm = { controller.startGroupStageDraw(gameId) }
                             )
                         }

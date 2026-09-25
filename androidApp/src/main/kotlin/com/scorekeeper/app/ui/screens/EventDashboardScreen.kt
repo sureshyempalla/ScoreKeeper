@@ -18,7 +18,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,6 +52,7 @@ fun EventDashboardScreen(
     onBack: () -> Unit,
     onAddGame: () -> Unit,
     onOpenGame: (EventGame) -> Unit,
+    onEditGame: (EventGame) -> Unit,
     onViewResults: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().background(Cream)) {
@@ -84,7 +87,7 @@ fun EventDashboardScreen(
                 Text("GAMES", style = MaterialTheme.typography.labelMedium, color = Muted)
             }
             items(games, key = { it.id }) { game ->
-                GameRow(game, onClick = { onOpenGame(game) })
+                GameRow(game, onClick = { onOpenGame(game) }, onEdit = { onEditGame(game) })
             }
             item {
                 Surface(
@@ -136,7 +139,7 @@ fun EventDashboardScreen(
 }
 
 @Composable
-private fun GameRow(game: EventGame, onClick: () -> Unit) {
+private fun GameRow(game: EventGame, onClick: () -> Unit, onEdit: () -> Unit) {
     val (badgeBg, badgeColor, badgeText) = when (game.status) {
         EventGameStatus.SETUP -> Triple(Color(0xFFF1EDE3), Muted, "Setup")
         EventGameStatus.DRAW_READY -> Triple(Color(0xFFEAF3EF), Green, "Draw Ready")
@@ -179,6 +182,9 @@ private fun GameRow(game: EventGame, onClick: () -> Unit) {
                     color = badgeColor,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
+            }
+            IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Filled.Edit, contentDescription = "Edit ${game.sportName}", tint = Muted, modifier = Modifier.size(18.dp))
             }
         }
     }

@@ -214,6 +214,28 @@ class GameRepository(
         id
     }
 
+    /**
+     * Edits a game's own settings. Name/emoji can be renamed any time; the UI only
+     * lets format/teamMode/playersPerTeam change while the game still has no
+     * entrants (ConfigureGameScreen's "locked" mode), so this never needs to touch
+     * any existing draw/entrants itself.
+     */
+    suspend fun updateEventGameConfig(
+        gameId: String,
+        sportName: String,
+        emoji: String,
+        format: TournamentFormat,
+        teamMode: EventTeamMode,
+        playersPerTeam: Int
+    ) = withContext(ioDispatcher) {
+        q.updateEventGameConfig(sportName, emoji, format.name, teamMode.name, playersPerTeam.toLong(), gameId)
+    }
+
+    /** Removes a game entirely; entrants/matches cascade-delete with it. */
+    suspend fun deleteEventGame(gameId: String) = withContext(ioDispatcher) {
+        q.deleteEventGame(gameId)
+    }
+
     suspend fun getEventGames(eventId: String): List<EventGame> = withContext(ioDispatcher) {
         q.selectGamesByEvent(eventId).executeAsList().map { it.toDomainShallow() }
     }
@@ -304,6 +326,12 @@ class GameRepository(
         q.updateEntrantRoster(roster.joinToString(ROSTER_SEPARATOR), entrantId)
     }
 
+    /** Renames a team and replaces its roster in one go -- what the Teams screen's edit dialog calls. */
+    suspend fun updateTeam(entrantId: String, teamName: String, roster: List<String>) = withContext(ioDispatcher) {
+        q.updateEntrantName(teamName, entrantId)
+        q.updateEntrantRoster(roster.joinToString(ROSTER_SEPARATOR), entrantId)
+    }
+
     suspend fun removeTeam(entrantId: String) = withContext(ioDispatcher) {
         q.deleteEntrant(entrantId)
     }
@@ -328,6 +356,18 @@ class GameRepository(
 
     suspend fun moveEntrantToGroup(entrantId: String, groupLabel: String) = withContext(ioDispatcher) {
         q.updateEntrantGroup(groupLabel, entrantId)
+    }
+
+    /**
+     * Clears every entrant's groupLabel, sending a GROUP_STAGE_THEN_KNOCKOUT game
+     * back to its Teams stage (VolleyballFlow's routing is state-driven: once no
+     * entrant has a group, it renders VolleyballTeamsScreen again). This is what
+     * the Groups screen's "Edit Teams" link calls -- there was previously no way
+     * back to Teams once groups were assigned, so a team's roster/name became
+     * uneditable the moment the organizer moved past that screen.
+     */
+    suspend fun resetGroups(gameId: String) = withContext(ioDispatcher) {
+        q.selectEntrantsByGame(gameId).executeAsList().forEach { q.updateEntrantGroup(null, it.id) }
     }
 
     /** Generates each group's round-robin schedule and moves the game into its group stage. */

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -60,10 +61,15 @@ fun VolleyballTeamsScreen(
     teams: List<EventEntrant>,
     onBack: () -> Unit,
     onAddTeam: (name: String, roster: List<String>) -> Unit,
+    onUpdateTeam: (entrantId: String, name: String, roster: List<String>) -> Unit,
     onRemoveTeam: (entrantId: String) -> Unit,
     onContinue: () -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    // Non-null while editing an existing team -- tapping a card opens the same
+    // dialog as "Add Another Team" but pre-filled, saving through onUpdateTeam
+    // instead of onAddTeam.
+    var editingTeam by remember { mutableStateOf<EventEntrant?>(null) }
     val allTeamsValid = teams.isNotEmpty() && teams.all { it.roster.size >= minTeamSize }
     val canContinue = teams.size >= 2 && allTeamsValid
 
@@ -93,7 +99,7 @@ fun VolleyballTeamsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(teams, key = { it.id }) { team ->
-                TeamCard(team, minTeamSize, onRemove = { onRemoveTeam(team.id) })
+                TeamCard(team, minTeamSize, onEdit = { editingTeam = team }, onRemove = { onRemoveTeam(team.id) })
             }
             item {
                 Surface(
@@ -136,12 +142,14 @@ fun VolleyballTeamsScreen(
         }
     }
 
-    if (showAddDialog) {
-        var name by remember { mutableStateOf("") }
-        var rosterText by remember { mutableStateOf("") }
+    if (showAddDialog || editingTeam != null) {
+        val isEditing = editingTeam != null
+        var name by remember { mutableStateOf(editingTeam?.name ?: "") }
+        var rosterText by remember { mutableStateOf(editingTeam?.roster?.joinToString(", ") ?: "") }
+        fun close() { showAddDialog = false; editingTeam = null }
         AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            title = { Text("Add a team") },
+            onDismissRequest = ::close,
+            title = { Text(if (isEditing) "Edit team" else "Add a team") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
@@ -163,22 +171,24 @@ fun VolleyballTeamsScreen(
                         val trimmedName = name.trim()
                         val roster = rosterText.split(",").map { it.trim() }.filter { it.isNotBlank() }
                         if (trimmedName.isNotBlank()) {
-                            onAddTeam(trimmedName, roster)
+                            val editing = editingTeam
+                            if (editing != null) onUpdateTeam(editing.id, trimmedName, roster) else onAddTeam(trimmedName, roster)
                         }
-                        showAddDialog = false
+                        close()
                     },
                     enabled = name.isNotBlank()
-                ) { Text("Add") }
+                ) { Text(if (isEditing) "Save" else "Add") }
             },
-            dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = ::close) { Text("Cancel") } }
         )
     }
 }
 
 @Composable
-private fun TeamCard(team: EventEntrant, minTeamSize: Int, onRemove: () -> Unit) {
+private fun TeamCard(team: EventEntrant, minTeamSize: Int, onEdit: () -> Unit, onRemove: () -> Unit) {
     val valid = team.roster.size >= minTeamSize
     Surface(
+        onClick = onEdit,
         shape = RoundedCornerShape(14.dp),
         color = Color.White,
         border = BorderStroke(if (valid) 1.dp else 1.5.dp, if (valid) Border else Danger)
@@ -190,8 +200,13 @@ private fun TeamCard(team: EventEntrant, minTeamSize: Int, onRemove: () -> Unit)
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(team.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                IconButton(onClick = onRemove) {
-                    Icon(Icons.Filled.Close, contentDescription = "Remove team", tint = Muted)
+                Row {
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Filled.Edit, contentDescription = "Edit team", tint = Muted)
+                    }
+                    IconButton(onClick = onRemove) {
+                        Icon(Icons.Filled.Close, contentDescription = "Remove team", tint = Muted)
+                    }
                 }
             }
             Text(

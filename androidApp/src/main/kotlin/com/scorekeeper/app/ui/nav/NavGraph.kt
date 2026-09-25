@@ -37,6 +37,10 @@ sealed class Screen(val route: String) {
     object ConfigureGame : Screen("configure_game/{eventId}") {
         fun build(eventId: String) = "configure_game/$eventId"
     }
+    /** Editing an already-created game's own settings (name/emoji any time, format/team mode pre-draw). */
+    object EditGame : Screen("edit_game/{gameId}") {
+        fun build(gameId: String) = "edit_game/$gameId"
+    }
     object AddParticipants : Screen("add_participants/{gameId}") {
         fun build(gameId: String) = "add_participants/$gameId"
     }

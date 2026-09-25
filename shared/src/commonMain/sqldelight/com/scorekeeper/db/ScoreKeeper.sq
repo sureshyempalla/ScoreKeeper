@@ -190,6 +190,16 @@ SELECT * FROM EventGameEntity WHERE id = ?;
 updateGameStatus:
 UPDATE EventGameEntity SET status = ? WHERE id = ?;
 
+-- Edits sport name/emoji/format/team mode/players-per-team on an already-created
+-- game. The UI only allows changing format/teamMode/playersPerTeam while the game
+-- has no entrants yet (see ConfigureGameScreen's "locked" mode) -- name/emoji can
+-- be renamed any time.
+updateEventGameConfig:
+UPDATE EventGameEntity SET sportName = ?, emoji = ?, format = ?, teamMode = ?, playersPerTeam = ? WHERE id = ?;
+
+deleteEventGame:
+DELETE FROM EventGameEntity WHERE id = ?;
+
 -- Event entrants -----------------------------------------------------------
 
 insertEntrant:
@@ -201,6 +211,9 @@ SELECT * FROM EventEntrantEntity WHERE eventGameId = ? ORDER BY seed ASC;
 
 selectEntrantById:
 SELECT * FROM EventEntrantEntity WHERE id = ?;
+
+updateEntrantName:
+UPDATE EventEntrantEntity SET name = ? WHERE id = ?;
 
 updateEntrantRoster:
 UPDATE EventEntrantEntity SET roster = ? WHERE id = ?;

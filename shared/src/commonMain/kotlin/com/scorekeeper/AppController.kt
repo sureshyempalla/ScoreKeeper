@@ -188,6 +188,22 @@ class AppController(private val repository: GameRepository) {
         return JobCancellable(job)
     }
 
+    fun updateEventGameConfig(
+        gameId: String,
+        sportName: String,
+        emoji: String,
+        format: TournamentFormat,
+        teamMode: EventTeamMode,
+        playersPerTeam: Int,
+        onUpdated: () -> Unit = {}
+    ) {
+        scope.launch { repository.updateEventGameConfig(gameId, sportName, emoji, format, teamMode, playersPerTeam); onUpdated() }
+    }
+
+    fun deleteEventGame(gameId: String, onDeleted: () -> Unit = {}) {
+        scope.launch { repository.deleteEventGame(gameId); onDeleted() }
+    }
+
     fun generateDraw(gameId: String, eventId: String, names: List<String>) {
         scope.launch { repository.generateDraw(gameId, eventId, names) }
     }
@@ -218,6 +234,10 @@ class AppController(private val repository: GameRepository) {
         scope.launch { repository.updateTeamRoster(entrantId, roster) }
     }
 
+    fun updateTeam(entrantId: String, teamName: String, roster: List<String>) {
+        scope.launch { repository.updateTeam(entrantId, teamName, roster) }
+    }
+
     fun removeTeam(entrantId: String) {
         scope.launch { repository.removeTeam(entrantId) }
     }
@@ -228,6 +248,10 @@ class AppController(private val repository: GameRepository) {
 
     fun moveEntrantToGroup(entrantId: String, groupLabel: String) {
         scope.launch { repository.moveEntrantToGroup(entrantId, groupLabel) }
+    }
+
+    fun resetGroups(gameId: String) {
+        scope.launch { repository.resetGroups(gameId) }
     }
 
     fun startGroupStageDraw(gameId: String, onStarted: () -> Unit = {}) {

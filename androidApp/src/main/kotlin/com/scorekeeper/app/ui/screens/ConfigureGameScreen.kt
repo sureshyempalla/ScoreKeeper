@@ -21,8 +21,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.scorekeeper.app.ui.theme.Border
 import com.scorekeeper.app.ui.theme.Cream
+import com.scorekeeper.app.ui.theme.Danger
 import com.scorekeeper.app.ui.theme.Green
 import com.scorekeeper.app.ui.theme.Muted
 import com.scorekeeper.domain.EventTeamMode
@@ -51,19 +54,35 @@ import com.scorekeeper.domain.TournamentFormat
  * [TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT] and team mode to
  * [EventTeamMode.TEAMS], and the flow continues into the dedicated
  * Teams/Groups/Standings screens instead of the generic Add Participants one.
+ *
+ * Also serves as [isEditing]'s edit mode for an already-created game (reached from
+ * EventDashboard's per-game edit action): the name/emoji become editable text
+ * fields, and when [locked] (the game already has entrants) the
+ * format/team-mode/stepper section is replaced with a read-only note instead
+ * of being editable, since changing those out from under an existing draw
+ * would invalidate it. [onDelete], when non-null, adds a "Delete Game" action.
  */
 @Composable
 fun ConfigureGameScreen(
     sportName: String,
     emoji: String,
+    isEditing: Boolean = false,
+    locked: Boolean = false,
+    initialFormat: TournamentFormat? = null,
+    initialTeamMode: EventTeamMode? = null,
+    initialPlayersPerTeam: Int? = null,
     onBack: () -> Unit,
-    onContinue: (format: TournamentFormat, teamMode: EventTeamMode, playersPerTeam: Int) -> Unit
+    onDelete: (() -> Unit)? = null,
+    onContinue: (sportName: String, emoji: String, format: TournamentFormat, teamMode: EventTeamMode, playersPerTeam: Int) -> Unit
 ) {
-    val minTeamSize = SportRules.minTeamSize(sportName)
+    var name by remember { mutableStateOf(sportName) }
+    var emojiText by remember { mutableStateOf(emoji) }
+    val minTeamSize = SportRules.minTeamSize(name)
     val isTeamSport = minTeamSize != null
-    var format by remember { mutableStateOf(if (isTeamSport) TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT else TournamentFormat.SINGLE_ELIMINATION) }
-    var teamMode by remember { mutableStateOf(if (isTeamSport) EventTeamMode.TEAMS else EventTeamMode.SINGLES) }
-    var playersPerTeam by remember { mutableStateOf(minTeamSize ?: 2) }
+    var format by remember { mutableStateOf(initialFormat ?: if (isTeamSport) TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT else TournamentFormat.SINGLE_ELIMINATION) }
+    var teamMode by remember { mutableStateOf(initialTeamMode ?: if (isTeamSport) EventTeamMode.TEAMS else EventTeamMode.SINGLES) }
+    var playersPerTeam by remember { mutableStateOf(initialPlayersPerTeam ?: minTeamSize ?: 2) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().background(Cream)) {
         Row(
@@ -76,10 +95,55 @@ fun ConfigureGameScreen(
                     Icon(Icons.Filled.ChevronLeft, contentDescription = "Back")
                 }
             }
-            Text("$emoji $sportName Setup", style = MaterialTheme.typography.headlineSmall)
+            if (isEditing) {
+                Text("Edit Game", style = MaterialTheme.typography.headlineSmall)
+            } else {
+                Text("$emoji $sportName Setup", style = MaterialTheme.typography.headlineSmall)
+            }
         }
 
-        if (isTeamSport) {
+        if (isEditing) {
+            Row(
+                Modifier.padding(20.dp, 10.dp, 20.dp, 0.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = emojiText,
+                    onValueChange = { emojiText = it },
+                    label = { Text("Emoji") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Sport name") },
+                    singleLine = true,
+                    modifier = Modifier.weight(3f)
+                )
+            }
+        }
+
+        if (isEditing && locked) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Surface(shape = RoundedCornerShape(14.dp), color = Color.White, border = BorderStroke(1.dp, Border)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Format Locked", style = MaterialTheme.typography.labelMedium, color = Muted)
+                        Text(
+                            "${format.displayName} · ${teamMode.displayName}" +
+                                if (teamMode != EventTeamMode.SINGLES) " · $playersPerTeam per team" else "",
+                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            "Format and team mode can't change once players have been added. Remove all players first if this needs to be different.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Muted
+                        )
+                    }
+                }
+            }
+        } else if (isTeamSport) {
             LazyColumn(
                 Modifier.weight(1f).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(22.dp)
@@ -166,13 +230,33 @@ fun ConfigureGameScreen(
 
         Column(Modifier.fillMaxWidth().background(Color.White).padding(20.dp, 14.dp, 20.dp, 26.dp)) {
             Button(
-                onClick = { onContinue(format, teamMode, playersPerTeam) },
+                onClick = { onContinue(name.trim().ifBlank { sportName }, emojiText.trim().ifBlank { emoji }, format, teamMode, playersPerTeam) },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Green)
             ) {
-                Text("Continue", fontWeight = FontWeight.Bold)
+                Text(if (isEditing) "Save Changes" else "Continue", fontWeight = FontWeight.Bold)
+            }
+            if (onDelete != null) {
+                TextButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Delete Game", color = Danger, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
+    }
+
+    if (showDeleteConfirm && onDelete != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete this game?") },
+            text = { Text("This removes \"$sportName\" and all of its teams/players and matches from this event. This can't be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = { showDeleteConfirm = false; onDelete() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Danger)
+                ) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+        )
     }
 }
 
