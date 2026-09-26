@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
 
         val repository = GameRepository(DatabaseDriverFactory(applicationContext))
         val controller = AppController(repository)
-        val authController = AuthController()
+        val authController = AuthController(repository)
 
         setContent {
             ScoreKeeperApp(controller, authController)

@@ -1,7 +1,9 @@
 package com.scorekeeper
 
 import com.scorekeeper.data.EmailAuthService
+import com.scorekeeper.data.GameRepository
 import com.scorekeeper.data.PhoneAuthGateway
+import com.scorekeeper.data.SessionGuard
 import com.scorekeeper.domain.AuthStatuses
 import com.scorekeeper.domain.AuthUiState
 import kotlinx.coroutines.CoroutineScope
@@ -29,9 +31,13 @@ import kotlinx.coroutines.launch
  * [uiState] rather than a return value or a thrown exception across the
  * Swift boundary.
  */
-class AuthController {
+class AuthController(repository: GameRepository) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val emailAuth = EmailAuthService()
+    private val sessionGuard = SessionGuard(repository)
+
+    /** Cancelled and replaced every time sign-in state changes; watches for another device taking over this session. */
+    private var takeoverWatchJob: Job? = null
 
     private val _uiState = MutableStateFlow(AuthUiState())
 
@@ -42,6 +48,8 @@ class AuthController {
     init {
         emailAuth.currentUser
             .onEach { user ->
+                takeoverWatchJob?.cancel()
+                takeoverWatchJob = null
                 _uiState.update { current ->
                     if (user != null) {
                         current.copy(statusId = AuthStatuses.SIGNED_IN, user = user, errorMessage = null)
@@ -51,8 +59,33 @@ class AuthController {
                         AuthUiState()
                     } else current
                 }
+                if (user != null) claimSessionAndWatch(user.uid)
             }
             .launchIn(scope)
+    }
+
+    /**
+     * Claims this device as the account's one active session (see
+     * [SessionGuard]), then watches for a later sign-in on another device
+     * taking that claim over -- if that happens, this device is signed out
+     * locally with an explanatory message.
+     */
+    private fun claimSessionAndWatch(uid: String) {
+        scope.launch {
+            val sessionId = sessionGuard.claim(uid)
+            // Assigned here (not the wrapping scope.launch above) -- this is the
+            // actual long-lived listener job takeoverWatchJob?.cancel() needs to
+            // stop; the wrapping launch finishes as soon as this line runs.
+            takeoverWatchJob = sessionGuard.watchForTakeover(uid, sessionId).onEach {
+                runCatching { emailAuth.signOut() }
+                _uiState.update {
+                    AuthUiState(
+                        statusId = AuthStatuses.ERROR,
+                        errorMessage = "Signed out because this account was used on another device."
+                    )
+                }
+            }.launchIn(scope)
+        }
     }
 
     /** iOS/SwiftUI: wraps this in an ObservableObject (see AppViewModel.swift). */
@@ -159,4 +192,4 @@ class AuthController {
 }
 
 /** No-default-args factory - see the note on similar factories in InteropHelpers.kt. */
-fun createAuthController(): AuthController = AuthController()
+fun createAuthController(repository: GameRepository): AuthController = AuthController(repository)

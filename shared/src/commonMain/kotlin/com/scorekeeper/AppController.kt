@@ -1,5 +1,6 @@
 package com.scorekeeper
 
+import com.scorekeeper.data.EventSyncRepository
 import com.scorekeeper.data.GameRepository
 import com.scorekeeper.domain.CommunityEvent
 import com.scorekeeper.domain.EntrantStanding
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 
 /** A trivial Closeable so Swift can cancel a subscription without pulling in kotlinx-coroutines types. */
 interface Cancellable {
@@ -50,6 +52,72 @@ internal class JobCancellable(private val job: Job) : Cancellable {
 class AppController(private val repository: GameRepository) {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val syncRepository = EventSyncRepository()
+
+    // --- Sync (Phase 1: on-demand, not realtime -- see EventSyncRepository) ---
+
+    /** Set by the UI whenever [AuthController.uiState] changes; null while signed out/guest. Auto-push only runs while this is set. */
+    private var currentUserId: String? = null
+
+    /**
+     * Called by the UI (Android: LaunchedEffect on authController.uiState;
+     * iOS: didSet on the observed uid) whenever sign-in state changes. Kicks
+     * off one sync immediately on sign-in, so a second device's events show
+     * up here right away rather than waiting for the next score/manual sync.
+     */
+    fun setCurrentUserId(uid: String?) {
+        val changed = currentUserId != uid
+        currentUserId = uid
+        if (changed && uid != null) syncNow()
+    }
+
+    /** Pushes every local event to the server, then pulls down any event this device doesn't have yet (see EventSyncRepository's merge rule). */
+    fun syncNow(onResult: (Boolean) -> Unit = {}) {
+        val uid = currentUserId
+        if (uid == null) {
+            onResult(false)
+            return
+        }
+        scope.launch {
+            val ok = runCatching {
+                repository.getAllFullEvents().forEach { syncRepository.push(uid, it) }
+                val known = repository.knownEventIds()
+                syncRepository.remoteEventIds(uid).filterNot { it in known }.forEach { eventId ->
+                    syncRepository.pull(uid, eventId)?.let { repository.importEventBundle(it) }
+                }
+                repository.setDeviceState("lastSyncedMillis", Clock.System.now().toEpochMilliseconds().toString())
+            }.isSuccess
+            onResult(ok)
+        }
+    }
+
+    fun getLastSyncedMillis(onResult: (Long?) -> Unit) {
+        scope.launch { onResult(repository.getDeviceState("lastSyncedMillis")?.toLongOrNull()) }
+    }
+
+    /** Fire-and-forget push of one event after a score-affecting action, while signed in. Failures are silent -- the next syncNow() (auto on next sign-in, or manual) catches up. */
+    private fun autoPushEvent(eventId: String) {
+        val uid = currentUserId ?: return
+        scope.launch { runCatching { repository.getFullEvent(eventId)?.let { syncRepository.push(uid, it) } } }
+    }
+
+    /** Same as [autoPushEvent] but starting from a gameId, looking up its parent eventId first. */
+    private fun autoPushEventForGame(gameId: String) {
+        if (currentUserId == null) return
+        scope.launch {
+            val eventId = repository.getEventGameDetail(gameId)?.eventId ?: return@launch
+            autoPushEvent(eventId)
+        }
+    }
+
+    /** Same as [autoPushEvent] but starting from a matchId (match -> game -> event). */
+    private fun autoPushEventForMatch(matchId: String) {
+        if (currentUserId == null) return
+        scope.launch {
+            val eventId = repository.eventIdForMatch(matchId) ?: return@launch
+            autoPushEvent(eventId)
+        }
+    }
 
     val sessions: StateFlow<List<GameSession>> =
         repository.observeSessions().stateIn(scope, SharingStarted.Eagerly, emptyList())
@@ -189,6 +257,7 @@ class AppController(private val repository: GameRepository) {
     ) {
         scope.launch {
             onCreated(repository.addEventGame(eventId, sportName, emoji, format, teamMode, playersPerTeam, pointRules))
+            autoPushEvent(eventId)
         }
     }
 
@@ -218,15 +287,18 @@ class AppController(private val repository: GameRepository) {
     }
 
     fun generateDraw(gameId: String, eventId: String, names: List<String>) {
-        scope.launch { repository.generateDraw(gameId, eventId, names) }
+        scope.launch { repository.generateDraw(gameId, eventId, names); autoPushEvent(eventId) }
     }
 
     fun saveMatchProgress(matchId: String, scoreA: Int, scoreB: Int) {
-        scope.launch { repository.saveMatchProgress(matchId, scoreA, scoreB) }
+        scope.launch { repository.saveMatchProgress(matchId, scoreA, scoreB); autoPushEventForMatch(matchId) }
     }
 
     fun declareMatchWinner(matchId: String, scoreA: Int, scoreB: Int, winnerEntrantId: String) {
-        scope.launch { repository.declareMatchWinner(matchId, scoreA, scoreB, winnerEntrantId) }
+        scope.launch {
+            repository.declareMatchWinner(matchId, scoreA, scoreB, winnerEntrantId)
+            autoPushEventForMatch(matchId)
+        }
     }
 
     fun markGameCompleteIfAllMatchesDone(gameId: String) {
@@ -236,11 +308,15 @@ class AppController(private val repository: GameRepository) {
     // --- Point-based-sport scoring (Table Tennis etc) ---
 
     fun recordSetScore(matchId: String, scoreA: Int, scoreB: Int, onResult: (Boolean) -> Unit = {}) {
-        scope.launch { onResult(repository.recordSetScore(matchId, scoreA, scoreB)) }
+        scope.launch {
+            val recorded = repository.recordSetScore(matchId, scoreA, scoreB)
+            if (recorded) autoPushEventForMatch(matchId)
+            onResult(recorded)
+        }
     }
 
     fun undoLastSet(matchId: String) {
-        scope.launch { repository.undoLastSet(matchId) }
+        scope.launch { repository.undoLastSet(matchId); autoPushEventForMatch(matchId) }
     }
 
     fun standingsFor(game: EventGame): List<EntrantStanding> = EventStandings.compute(game)
@@ -278,11 +354,11 @@ class AppController(private val repository: GameRepository) {
     }
 
     fun startGroupStageDraw(gameId: String, onStarted: () -> Unit = {}) {
-        scope.launch { repository.startGroupStageDraw(gameId); onStarted() }
+        scope.launch { repository.startGroupStageDraw(gameId); autoPushEventForGame(gameId); onStarted() }
     }
 
     fun advanceToPlayoffs(gameId: String, onAdvanced: () -> Unit = {}) {
-        scope.launch { repository.advanceToPlayoffs(gameId); onAdvanced() }
+        scope.launch { repository.advanceToPlayoffs(gameId); autoPushEventForGame(gameId); onAdvanced() }
     }
 
     fun groupLabelsFor(game: EventGame): List<String> = EventStandings.groupLabels(game)

@@ -1,3 +1,12 @@
+-- Small per-device key/value store (see 6.sqm for why it's generic rather
+-- than dedicated columns): the local device's claimed Firebase session id
+-- (single-device-login enforcement, see SessionGuard) and the last-synced
+-- timestamp (see EventSyncRepository).
+CREATE TABLE DeviceStateEntity (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 -- A game session: one played instance of a game (e.g. "Friday Rummy night")
 CREATE TABLE GameSessionEntity (
     id TEXT NOT NULL PRIMARY KEY,
@@ -292,3 +301,28 @@ DELETE FROM EventSetEntity WHERE id = ?;
 
 deleteSetsByMatch:
 DELETE FROM EventSetEntity WHERE matchId = ?;
+
+deleteSetsByGame:
+DELETE FROM EventSetEntity WHERE matchId IN (SELECT id FROM EventMatchEntity WHERE eventGameId = ?);
+
+-- Sync (server import) --------------------------------------------------
+-- Plain INSERT above is for locally-created rows (fresh ids, never
+-- conflict). These OR REPLACE variants are only for EventSyncRepository
+-- importing a bundle that was pushed from another device -- same id,
+-- content replaced wholesale.
+
+upsertEvent:
+INSERT OR REPLACE INTO EventEntity(id, name, emoji, eventDate, endDate, location, createdAt)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+upsertEventGame:
+INSERT OR REPLACE INTO EventGameEntity(id, eventId, sportName, emoji, format, teamMode, playersPerTeam, status, orderIndex, ppPointsPerSet, ppBestOfSets, ppWinByTwo, ppDeuceCap)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- Device-local key/value state ----------------------------------------------
+
+setDeviceState:
+INSERT OR REPLACE INTO DeviceStateEntity(key, value) VALUES (?, ?);
+
+getDeviceState:
+SELECT value FROM DeviceStateEntity WHERE key = ?;

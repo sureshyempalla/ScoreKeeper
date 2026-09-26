@@ -32,6 +32,7 @@ import com.scorekeeper.app.ui.screens.HomeScreen
 import com.scorekeeper.app.ui.screens.LoginScreen
 import com.scorekeeper.app.ui.screens.MatchScoreScreen
 import com.scorekeeper.app.ui.screens.PlayerPickerScreen
+import com.scorekeeper.app.ui.screens.ProfileScreen
 import com.scorekeeper.app.ui.screens.RoundHistoryScreen
 import com.scorekeeper.app.ui.screens.ScoreEntryScreen
 import com.scorekeeper.app.ui.screens.SetScoreEntryScreen
@@ -80,6 +81,16 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
     var pendingSportEmoji by remember { mutableStateOf("") }
     val events by controller.events.collectAsStateWithLifecycle()
 
+    // Keeps AppController's auto-sync (see AppController.setCurrentUserId) in
+    // step with auth state: signed in -> that uid; signed out/guest -> null,
+    // which turns auto-push/syncNow into a no-op without the UI having to
+    // check auth state itself before every mutating call.
+    LaunchedEffect(authState.statusId, authState.user?.uid) {
+        controller.setCurrentUserId(
+            if (authState.statusId == AuthStatuses.SIGNED_IN) authState.user?.uid else null
+        )
+    }
+
     // Android 15 (targetSdk 35) draws content edge-to-edge under the status bar and behind
     // the gesture nav bar regardless of what MainActivity does, so every screen needs this
     // safe-area padding -- applied once here rather than per-screen. The Surface behind it
@@ -100,7 +111,7 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                     onOpenEvents = { navController.navigate(Screen.EventsHome.route) },
                     onOpenSession = { sessionId -> navController.navigate(Screen.ScoreEntry.build(sessionId)) },
                     onOpenStats = { navController.navigate(Screen.ComingSoon.build("Stats")) },
-                    onOpenProfile = { navController.navigate(Screen.ComingSoon.build("Profile")) },
+                    onOpenProfile = { navController.navigate(Screen.Profile.route) },
                     onSignInBannerClick = { navController.navigate(Screen.Login.route) },
                     onAddSavedPlayer = { name -> controller.addSavedPlayer(name) },
                     onDeleteSession = { controller.deleteSession(it) }
@@ -125,6 +136,17 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                         authController.continueAsGuest()
                         navController.popBackStack()
                     }
+                )
+            }
+
+            composable(Screen.Profile.route) {
+                ProfileScreen(
+                    uiState = authState,
+                    onBack = { navController.popBackStack() },
+                    onSignIn = { navController.navigate(Screen.Login.route) },
+                    onSignOut = { authController.signOut() },
+                    onSyncNow = { onResult -> controller.syncNow(onResult) },
+                    onGetLastSynced = { onResult -> controller.getLastSyncedMillis(onResult) }
                 )
             }
 
@@ -263,7 +285,7 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                         }
                     },
                     onStats = { navController.navigate(Screen.ComingSoon.build("Stats")) },
-                    onProfile = { navController.navigate(Screen.ComingSoon.build("Profile")) }
+                    onProfile = { navController.navigate(Screen.Profile.route) }
                 )
             }
 

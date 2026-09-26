@@ -40,6 +40,9 @@ kotlin {
             // platform-specific app-verification (Play Integrity vs APNs).
             implementation(libs.gitlive.firebase.auth)
             implementation(libs.gitlive.firebase.common)
+            // Sync (EventSyncRepository) and single-device-session enforcement
+            // (SessionGuard) both store their data in Firestore.
+            implementation(libs.gitlive.firebase.firestore)
         }
         androidMain.dependencies {
             implementation(libs.sqldelight.android.driver)

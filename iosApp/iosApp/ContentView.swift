@@ -25,7 +25,7 @@ struct ContentView: View {
         let repository = InteropHelpersKt.createGameRepository(driverFactory: DatabaseDriverFactory())
         let controller = AppController(repository: repository)
         _appVM = StateObject(wrappedValue: AppViewModel(controller: controller))
-        _authVM = StateObject(wrappedValue: AuthViewModel(controller: AuthControllerKt.createAuthController()))
+        _authVM = StateObject(wrappedValue: AuthViewModel(controller: AuthControllerKt.createAuthController(repository: repository)))
     }
 
     var body: some View {

@@ -3,6 +3,7 @@ package com.scorekeeper.app.ui.nav
 sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Login : Screen("login")
+    object Profile : Screen("profile")
     object GamePicker : Screen("game_picker")
     object PlayerPicker : Screen("player_picker/{gameType}") {
         fun build(gameType: String) = "player_picker/$gameType"

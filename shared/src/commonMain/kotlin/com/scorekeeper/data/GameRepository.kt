@@ -14,6 +14,7 @@ import com.scorekeeper.db.RoundScoreEntity
 import com.scorekeeper.db.SavedPlayerEntity
 import com.scorekeeper.db.ScoreKeeperDatabase
 import com.scorekeeper.domain.CommunityEvent
+import com.scorekeeper.domain.EventBundle
 import com.scorekeeper.domain.EventEntrant
 import com.scorekeeper.domain.EventGame
 import com.scorekeeper.domain.EventGameStatus
@@ -528,6 +529,105 @@ class GameRepository(
         if (matches.isNotEmpty() && matches.all { it.status == EventMatchStatus.COMPLETE.name }) {
             q.updateGameStatus(EventGameStatus.COMPLETE.name, gameId)
         }
+    }
+
+    /** Looks up the eventId a match ultimately belongs to (match -> game -> event), for auto-sync after a score change. */
+    suspend fun eventIdForMatch(matchId: String): String? = withContext(ioDispatcher) {
+        val match = q.selectMatchById(matchId).executeAsOneOrNull() ?: return@withContext null
+        q.selectGameById(match.eventGameId).executeAsOneOrNull()?.eventId
+    }
+
+    // Sync (EventSyncRepository) ------------------------------------------------
+
+    /** One event with every one of its games fully hydrated (entrants/matches/sets) -- the unit [EventBundle] pushes/pulls. */
+    suspend fun getFullEvent(eventId: String): EventBundle? = withContext(ioDispatcher) {
+        val event = q.selectEventById(eventId).executeAsOneOrNull()?.toDomain() ?: return@withContext null
+        val games = q.selectGamesByEvent(eventId).executeAsList().map { gameRow ->
+            val entrants = q.selectEntrantsByGame(gameRow.id).executeAsList().map { it.toDomain() }
+            val setsByMatch = q.selectSetsByGame(gameRow.id).executeAsList().map { it.toDomain() to it.matchId }
+                .groupBy({ it.second }, { it.first })
+            val matches = q.selectMatchesByGame(gameRow.id).executeAsList()
+                .map { it.toDomain(setsByMatch[it.id].orEmpty()) }
+            gameRow.toDomainShallow().copy(entrants = entrants, matches = matches)
+        }
+        EventBundle(event = event, games = games)
+    }
+
+    /** Every locally-known event, fully hydrated -- what a "Sync now" push sends up. */
+    suspend fun getAllFullEvents(): List<EventBundle> = withContext(ioDispatcher) {
+        q.selectAllEvents().executeAsList().mapNotNull { getFullEvent(it.id) }
+    }
+
+    /** Ids of every event this device already has locally, so a pull only imports events new to this device. */
+    suspend fun knownEventIds(): Set<String> = withContext(ioDispatcher) {
+        q.selectAllEvents().executeAsList().map { it.id }.toSet()
+    }
+
+    /**
+     * Writes a bundle pulled from the server into the local database, wholesale
+     * replacing anything already stored under these ids. Used only for events
+     * new to this device (see [knownEventIds]) -- never to overwrite an event
+     * this device already has, so a pull can't clobber an in-progress local
+     * edit with stale server data.
+     */
+    suspend fun importEventBundle(bundle: EventBundle) = withContext(ioDispatcher) {
+        val e = bundle.event
+        q.upsertEvent(
+            id = e.id,
+            name = e.name,
+            emoji = e.emoji,
+            eventDate = e.dateMillis,
+            endDate = e.endDateMillis,
+            location = e.location,
+            createdAt = e.createdAtMillis
+        )
+        bundle.games.forEach { g ->
+            q.upsertEventGame(
+                id = g.id,
+                eventId = e.id,
+                sportName = g.sportName,
+                emoji = g.emoji,
+                format = g.format.name,
+                teamMode = g.teamMode.name,
+                playersPerTeam = g.playersPerTeam.toLong(),
+                status = g.status.name,
+                orderIndex = g.orderIndex.toLong(),
+                ppPointsPerSet = g.pointRules?.pointsPerSet?.toLong(),
+                ppBestOfSets = g.pointRules?.bestOfSets?.toLong(),
+                ppWinByTwo = g.pointRules?.let { if (it.winByTwo) 1L else 0L },
+                ppDeuceCap = g.pointRules?.deuceCap?.toLong()
+            )
+            q.deleteSetsByGame(g.id)
+            q.deleteMatchesByGame(g.id)
+            q.deleteEntrantsByGame(g.id)
+            g.entrants.forEach { entrant ->
+                q.insertEntrant(
+                    id = entrant.id,
+                    eventGameId = g.id,
+                    name = entrant.name,
+                    colorIndex = entrant.colorIndex.toLong(),
+                    seed = entrant.seed.toLong(),
+                    roster = entrant.roster.joinToString(ROSTER_SEPARATOR),
+                    groupLabel = entrant.groupLabel
+                )
+            }
+            insertMatches(g.id, g.matches)
+            g.matches.forEach { match ->
+                match.sets.forEach { set ->
+                    q.insertSet(id = newId(), matchId = match.id, setNumber = set.setNumber.toLong(), scoreA = set.scoreA.toLong(), scoreB = set.scoreB.toLong())
+                }
+            }
+        }
+    }
+
+    // Device-local key/value state (session id, last-synced time; see 6.sqm) ---
+
+    suspend fun getDeviceState(key: String): String? = withContext(ioDispatcher) {
+        q.getDeviceState(key).executeAsOneOrNull()
+    }
+
+    suspend fun setDeviceState(key: String, value: String) = withContext(ioDispatcher) {
+        q.setDeviceState(key, value)
     }
 
     private fun EventEntity.toDomain(): CommunityEvent = CommunityEvent(

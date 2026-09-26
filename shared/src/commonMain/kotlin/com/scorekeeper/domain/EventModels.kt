@@ -149,6 +149,7 @@ object PointBasedSports {
     fun usesPointRules(sportName: String): Boolean = sportName.trim().lowercase() in names
 }
 
+@Serializable
 data class EventGame(
     val id: String,
     val eventId: String,

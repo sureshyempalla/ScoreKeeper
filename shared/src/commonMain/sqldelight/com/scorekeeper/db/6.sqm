@@ -1,0 +1,9 @@
+-- Small per-device key/value store: currently holds the local device's claimed
+-- Firebase session id (for single-device-login enforcement, see SessionGuard)
+-- and the last-synced timestamp (see EventSyncRepository). Deliberately
+-- generic (key/value) rather than dedicated columns so a future need doesn't
+-- require another migration.
+CREATE TABLE DeviceStateEntity (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
