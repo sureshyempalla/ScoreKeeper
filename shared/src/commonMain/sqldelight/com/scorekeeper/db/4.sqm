@@ -1,0 +1,9 @@
+-- Adds an optional end date to EventEntity (see ScoreKeeper.sq), so a
+-- Community Event can span multiple days (e.g. a weekend tournament)
+-- instead of always being a single-day event. Existing installs are on
+-- schema version 4 (after 3.sqm's team/group-stage columns) and don't have
+-- this column yet; this migration brings them to version 5. The column is
+-- nullable and defaults to NULL, so every event created before this
+-- migration keeps working exactly as a single-day event (start == end).
+
+ALTER TABLE EventEntity ADD COLUMN endDate INTEGER;

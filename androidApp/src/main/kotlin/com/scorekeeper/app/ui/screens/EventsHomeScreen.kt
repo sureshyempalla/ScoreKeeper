@@ -29,7 +29,7 @@ import com.scorekeeper.app.ui.theme.Amber
 import com.scorekeeper.app.ui.theme.Border
 import com.scorekeeper.app.ui.theme.Cream
 import com.scorekeeper.app.ui.theme.Muted
-import com.scorekeeper.app.ui.util.formatEventDateShort
+import com.scorekeeper.app.ui.util.formatEventDateRangeShort
 import com.scorekeeper.domain.CommunityEvent
 
 /**
@@ -129,7 +129,7 @@ private fun EventCard(event: CommunityEvent, gameCount: Int, isDone: Boolean, on
                 Text(event.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 Text(
                     buildString {
-                        append(formatEventDateShort(event.dateMillis))
+                        append(formatEventDateRangeShort(event.dateMillis, event.endDateMillis))
                         if (gameCount > 0) append(" · $gameCount game${if (gameCount == 1) "" else "s"}")
                         if (!event.location.isNullOrBlank()) append(" · ${event.location}")
                     },

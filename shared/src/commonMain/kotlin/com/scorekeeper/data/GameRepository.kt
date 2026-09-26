@@ -165,7 +165,13 @@ class GameRepository(
 
     // Events -----------------------------------------------------------------
 
-    suspend fun createEvent(name: String, emoji: String, dateMillis: Long, location: String?): String =
+    suspend fun createEvent(
+        name: String,
+        emoji: String,
+        dateMillis: Long,
+        endDateMillis: Long?,
+        location: String?
+    ): String =
         withContext(ioDispatcher) {
             val id = newId()
             q.insertEvent(
@@ -173,6 +179,7 @@ class GameRepository(
                 name = name,
                 emoji = emoji,
                 eventDate = dateMillis,
+                endDate = endDateMillis,
                 location = location,
                 createdAt = Clock.System.now().toEpochMilliseconds()
             )
@@ -442,6 +449,7 @@ class GameRepository(
         name = name,
         emoji = emoji,
         dateMillis = eventDate,
+        endDateMillis = endDate,
         location = location,
         createdAtMillis = createdAt
     )

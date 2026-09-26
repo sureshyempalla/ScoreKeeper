@@ -72,6 +72,8 @@ data class CommunityEvent(
     val name: String,
     val emoji: String,
     val dateMillis: Long,
+    /** Null for a single-day event; when set, marks the last day of a multi-day event. */
+    val endDateMillis: Long?,
     val location: String?,
     val createdAtMillis: Long
 )

@@ -151,8 +151,15 @@ class AppController(private val repository: GameRepository) {
     val events: StateFlow<List<CommunityEvent>> =
         repository.observeEvents().stateIn(scope, SharingStarted.Eagerly, emptyList())
 
-    fun createEvent(name: String, emoji: String, dateMillis: Long, location: String?, onCreated: (String) -> Unit) {
-        scope.launch { onCreated(repository.createEvent(name, emoji, dateMillis, location)) }
+    fun createEvent(
+        name: String,
+        emoji: String,
+        dateMillis: Long,
+        endDateMillis: Long?,
+        location: String?,
+        onCreated: (String) -> Unit
+    ) {
+        scope.launch { onCreated(repository.createEvent(name, emoji, dateMillis, endDateMillis, location)) }
     }
 
     fun watchEvent(eventId: String, onChange: (CommunityEvent?) -> Unit): Cancellable {

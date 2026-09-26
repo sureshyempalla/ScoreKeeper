@@ -49,6 +49,8 @@ CREATE TABLE EventEntity (
     name TEXT NOT NULL,
     emoji TEXT NOT NULL,
     eventDate INTEGER NOT NULL,
+    -- Last day of a multi-day event; NULL for a single-day event.
+    endDate INTEGER,
     location TEXT,
     createdAt INTEGER NOT NULL
 );
@@ -163,8 +165,8 @@ DELETE FROM SavedPlayerEntity WHERE id = ?;
 -- Events -----------------------------------------------------------------
 
 insertEvent:
-INSERT INTO EventEntity(id, name, emoji, eventDate, location, createdAt)
-VALUES (?, ?, ?, ?, ?, ?);
+INSERT INTO EventEntity(id, name, emoji, eventDate, endDate, location, createdAt)
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
 selectAllEvents:
 SELECT * FROM EventEntity ORDER BY eventDate DESC;

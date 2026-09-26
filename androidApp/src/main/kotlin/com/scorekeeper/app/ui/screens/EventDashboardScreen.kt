@@ -35,7 +35,7 @@ import com.scorekeeper.app.ui.theme.Border
 import com.scorekeeper.app.ui.theme.Cream
 import com.scorekeeper.app.ui.theme.Green
 import com.scorekeeper.app.ui.theme.Muted
-import com.scorekeeper.app.ui.util.formatEventDateShort
+import com.scorekeeper.app.ui.util.formatEventDateRangeShort
 import com.scorekeeper.domain.CommunityEvent
 import com.scorekeeper.domain.EventGame
 import com.scorekeeper.domain.EventGameStatus
@@ -70,7 +70,7 @@ fun EventDashboardScreen(
                 Text("${event.emoji} ${event.name}", style = MaterialTheme.typography.titleLarge)
                 Text(
                     buildString {
-                        append(formatEventDateShort(event.dateMillis))
+                        append(formatEventDateRangeShort(event.dateMillis, event.endDateMillis))
                         if (!event.location.isNullOrBlank()) append(" · ${event.location}")
                     },
                     style = MaterialTheme.typography.labelMedium,

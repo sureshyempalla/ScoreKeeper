@@ -269,8 +269,8 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
             composable(Screen.CreateEvent.route) {
                 CreateEventScreen(
                     onBack = { navController.popBackStack() },
-                    onCreate = { name, emoji, dateMillis, location ->
-                        controller.createEvent(name, emoji, dateMillis, location) { eventId ->
+                    onCreate = { name, emoji, dateMillis, endDateMillis, location ->
+                        controller.createEvent(name, emoji, dateMillis, endDateMillis, location) { eventId ->
                             navController.navigate(Screen.EventDashboard.build(eventId)) {
                                 popUpTo(Screen.EventsHome.route)
                             }
