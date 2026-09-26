@@ -17,14 +17,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.scorekeeper.app.ui.theme.Amber
 import com.scorekeeper.app.ui.theme.Border
 import com.scorekeeper.app.ui.theme.Cream
+import com.scorekeeper.app.ui.theme.Danger
 import com.scorekeeper.app.ui.theme.Green
 import com.scorekeeper.app.ui.theme.Muted
 import com.scorekeeper.app.ui.util.formatEventDateRangeShort
@@ -53,8 +63,11 @@ fun EventDashboardScreen(
     onAddGame: () -> Unit,
     onOpenGame: (EventGame) -> Unit,
     onEditGame: (EventGame) -> Unit,
+    onDeleteEvent: () -> Unit,
     onViewResults: () -> Unit
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
     Column(Modifier.fillMaxSize().background(Cream)) {
         Row(
             Modifier.padding(20.dp, 24.dp, 20.dp, 4.dp),
@@ -76,6 +89,9 @@ fun EventDashboardScreen(
                     style = MaterialTheme.typography.labelMedium,
                     color = Muted
                 )
+            }
+            IconButton(onClick = { showDeleteConfirm = true }) {
+                Icon(Icons.Filled.Delete, contentDescription = "Delete event", tint = Danger)
             }
         }
 
@@ -135,6 +151,25 @@ fun EventDashboardScreen(
                 }
             }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete this event?") },
+            text = {
+                Text(
+                    "This removes \"${event.name}\" and all of its games, teams, and matches. This can't be undone."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showDeleteConfirm = false; onDeleteEvent() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Danger)
+                ) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+        )
     }
 }
 

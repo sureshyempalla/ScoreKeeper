@@ -300,6 +300,9 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                         }
                     },
                         onEditGame = { game -> navController.navigate(Screen.EditGame.build(game.id)) },
+                        onDeleteEvent = {
+                            controller.deleteEvent(eventId) { navController.popBackStack() }
+                        },
                         onViewResults = { navController.navigate(Screen.EventResults.build(eventId)) }
                     )
                 }

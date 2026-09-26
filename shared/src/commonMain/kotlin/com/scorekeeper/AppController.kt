@@ -172,8 +172,8 @@ class AppController(private val repository: GameRepository) {
         return JobCancellable(job)
     }
 
-    fun deleteEvent(eventId: String) {
-        scope.launch { repository.deleteEvent(eventId) }
+    fun deleteEvent(eventId: String, onDeleted: () -> Unit = {}) {
+        scope.launch { repository.deleteEvent(eventId); onDeleted() }
     }
 
     fun addEventGame(
