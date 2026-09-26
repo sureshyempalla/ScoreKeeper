@@ -23,6 +23,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,6 +43,8 @@ import com.scorekeeper.app.ui.theme.Danger
 import com.scorekeeper.app.ui.theme.Green
 import com.scorekeeper.app.ui.theme.Muted
 import com.scorekeeper.domain.EventTeamMode
+import com.scorekeeper.domain.PointBasedSports
+import com.scorekeeper.domain.PointRules
 import com.scorekeeper.domain.SportRules
 import com.scorekeeper.domain.TournamentFormat
 
@@ -71,18 +75,39 @@ fun ConfigureGameScreen(
     initialFormat: TournamentFormat? = null,
     initialTeamMode: EventTeamMode? = null,
     initialPlayersPerTeam: Int? = null,
+    initialPointRules: PointRules? = null,
     onBack: () -> Unit,
     onDelete: (() -> Unit)? = null,
-    onContinue: (sportName: String, emoji: String, format: TournamentFormat, teamMode: EventTeamMode, playersPerTeam: Int) -> Unit
+    onContinue: (
+        sportName: String,
+        emoji: String,
+        format: TournamentFormat,
+        teamMode: EventTeamMode,
+        playersPerTeam: Int,
+        pointRules: PointRules?
+    ) -> Unit
 ) {
     var name by remember { mutableStateOf(sportName) }
     var emojiText by remember { mutableStateOf(emoji) }
     val minTeamSize = SportRules.minTeamSize(name)
     val isTeamSport = minTeamSize != null
+    val usesPointRules = PointBasedSports.usesPointRules(name)
     var format by remember { mutableStateOf(initialFormat ?: if (isTeamSport) TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT else TournamentFormat.SINGLE_ELIMINATION) }
     var teamMode by remember { mutableStateOf(initialTeamMode ?: if (isTeamSport) EventTeamMode.TEAMS else EventTeamMode.SINGLES) }
     var playersPerTeam by remember { mutableStateOf(initialPlayersPerTeam ?: minTeamSize ?: 2) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    // Match rules (Table Tennis etc) -- ignored entirely unless usesPointRules.
+    val defaultPointRules = initialPointRules ?: PointRules()
+    var bestOfSets by remember { mutableStateOf(defaultPointRules.bestOfSets) }
+    var pointsPerSet by remember { mutableStateOf(defaultPointRules.pointsPerSet) }
+    var customPointsText by remember {
+        mutableStateOf(if (defaultPointRules.pointsPerSet !in listOf(11, 21)) defaultPointRules.pointsPerSet.toString() else "")
+    }
+    var usingCustomPoints by remember { mutableStateOf(defaultPointRules.pointsPerSet !in listOf(11, 21)) }
+    var winByTwo by remember { mutableStateOf(defaultPointRules.winByTwo) }
+    var deuceCapEnabled by remember { mutableStateOf(defaultPointRules.deuceCap != null) }
+    var deuceCap by remember { mutableStateOf(defaultPointRules.deuceCap ?: (pointsPerSet + 4)) }
 
     Column(Modifier.fillMaxSize().background(Cream)) {
         Row(
@@ -135,6 +160,15 @@ fun ConfigureGameScreen(
                             fontWeight = FontWeight.SemiBold,
                             style = MaterialTheme.typography.bodyMedium
                         )
+                        if (usesPointRules) {
+                            Text(
+                                "Best of $bestOfSets · $pointsPerSet points" +
+                                    (if (winByTwo) ", win by 2" else "") +
+                                    (if (deuceCapEnabled) " (capped at $deuceCap)" else ""),
+                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                         Text(
                             "Format and team mode can't change once players have been added. Remove all players first if this needs to be different.",
                             style = MaterialTheme.typography.labelSmall,
@@ -225,12 +259,158 @@ fun ConfigureGameScreen(
                     )
                 }
             }
+
+            if (usesPointRules) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("MATCH RULES", style = MaterialTheme.typography.labelMedium, color = Muted)
+
+                        Text("Sets per match", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf(3, 5, 7).forEach { bestOf ->
+                                val selected = bestOf == bestOfSets
+                                Surface(
+                                    onClick = { bestOfSets = bestOf },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (selected) Green else Color(0xFFF1EDE3),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                        Text(
+                                            "Best of $bestOf",
+                                            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+                                            fontWeight = FontWeight.SemiBold,
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Text("Points per set", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            listOf(11, 21).forEach { points ->
+                                val selected = !usingCustomPoints && points == pointsPerSet
+                                Surface(
+                                    onClick = { usingCustomPoints = false; pointsPerSet = points },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (selected) Green else Color(0xFFF1EDE3),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                        Text(
+                                            points.toString(),
+                                            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+                                            fontWeight = FontWeight.SemiBold,
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
+                                }
+                            }
+                            Surface(
+                                onClick = { usingCustomPoints = true },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (usingCustomPoints) Green else Color(0xFFF1EDE3),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(Modifier.padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        "Custom",
+                                        color = if (usingCustomPoints) Color.White else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                            }
+                        }
+                        if (usingCustomPoints) {
+                            OutlinedTextField(
+                                value = customPointsText,
+                                onValueChange = { text ->
+                                    customPointsText = text
+                                    text.toIntOrNull()?.let { if (it > 0) pointsPerSet = it }
+                                },
+                                label = { Text("Custom points per set") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Row(
+                            Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(12.dp)).padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Win by 2 at deuce", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    "Off means the set ends the instant either side hits the target.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Muted
+                                )
+                            }
+                            Switch(checked = winByTwo, onCheckedChange = { winByTwo = it }, colors = SwitchDefaults.colors(checkedTrackColor = Green))
+                        }
+
+                        Row(
+                            Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(12.dp)).padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Deuce cap", fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    "Hard cap at N points regardless of a 2-point margin.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Muted
+                                )
+                            }
+                            Switch(
+                                checked = deuceCapEnabled,
+                                onCheckedChange = { deuceCapEnabled = it },
+                                colors = SwitchDefaults.colors(checkedTrackColor = Green)
+                            )
+                        }
+                        if (deuceCapEnabled) {
+                            Row(
+                                Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(12.dp)).padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Cap at", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    StepperDot("−") { if (deuceCap > pointsPerSet + 1) deuceCap-- }
+                                    Text(deuceCap.toString(), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                    StepperDot("+") { deuceCap++ }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         }
 
         Column(Modifier.fillMaxWidth().background(Color.White).padding(20.dp, 14.dp, 20.dp, 26.dp)) {
             Button(
-                onClick = { onContinue(name.trim().ifBlank { sportName }, emojiText.trim().ifBlank { emoji }, format, teamMode, playersPerTeam) },
+                onClick = {
+                    val pointRules = if (usesPointRules) {
+                        PointRules(
+                            pointsPerSet = pointsPerSet,
+                            bestOfSets = bestOfSets,
+                            winByTwo = winByTwo,
+                            deuceCap = if (deuceCapEnabled) deuceCap else null
+                        )
+                    } else null
+                    onContinue(
+                        name.trim().ifBlank { sportName },
+                        emojiText.trim().ifBlank { emoji },
+                        format,
+                        teamMode,
+                        playersPerTeam,
+                        pointRules
+                    )
+                },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Green)
             ) {

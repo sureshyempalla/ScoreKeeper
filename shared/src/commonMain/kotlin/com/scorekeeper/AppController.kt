@@ -9,6 +9,7 @@ import com.scorekeeper.domain.GameRules
 import com.scorekeeper.domain.GameSession
 import com.scorekeeper.domain.GameType
 import com.scorekeeper.domain.PlayerStanding
+import com.scorekeeper.domain.PointRules
 import com.scorekeeper.domain.RoundOutcome
 import com.scorekeeper.domain.SavedPlayer
 import com.scorekeeper.domain.TournamentFormat
@@ -183,10 +184,11 @@ class AppController(private val repository: GameRepository) {
         format: TournamentFormat,
         teamMode: EventTeamMode,
         playersPerTeam: Int,
+        pointRules: PointRules? = null,
         onCreated: (String) -> Unit
     ) {
         scope.launch {
-            onCreated(repository.addEventGame(eventId, sportName, emoji, format, teamMode, playersPerTeam))
+            onCreated(repository.addEventGame(eventId, sportName, emoji, format, teamMode, playersPerTeam, pointRules))
         }
     }
 
@@ -202,9 +204,13 @@ class AppController(private val repository: GameRepository) {
         format: TournamentFormat,
         teamMode: EventTeamMode,
         playersPerTeam: Int,
+        pointRules: PointRules? = null,
         onUpdated: () -> Unit = {}
     ) {
-        scope.launch { repository.updateEventGameConfig(gameId, sportName, emoji, format, teamMode, playersPerTeam); onUpdated() }
+        scope.launch {
+            repository.updateEventGameConfig(gameId, sportName, emoji, format, teamMode, playersPerTeam, pointRules)
+            onUpdated()
+        }
     }
 
     fun deleteEventGame(gameId: String, onDeleted: () -> Unit = {}) {
@@ -225,6 +231,16 @@ class AppController(private val repository: GameRepository) {
 
     fun markGameCompleteIfAllMatchesDone(gameId: String) {
         scope.launch { repository.markGameCompleteIfAllMatchesDone(gameId) }
+    }
+
+    // --- Point-based-sport scoring (Table Tennis etc) ---
+
+    fun recordSetScore(matchId: String, scoreA: Int, scoreB: Int, onResult: (Boolean) -> Unit = {}) {
+        scope.launch { onResult(repository.recordSetScore(matchId, scoreA, scoreB)) }
+    }
+
+    fun undoLastSet(matchId: String) {
+        scope.launch { repository.undoLastSet(matchId) }
     }
 
     fun standingsFor(game: EventGame): List<EntrantStanding> = EventStandings.compute(game)

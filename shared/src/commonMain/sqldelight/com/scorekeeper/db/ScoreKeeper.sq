@@ -66,6 +66,12 @@ CREATE TABLE EventGameEntity (
     playersPerTeam INTEGER NOT NULL DEFAULT 1,
     status TEXT NOT NULL DEFAULT 'SETUP',
     orderIndex INTEGER NOT NULL,
+    -- Point-based-sport match rules (Table Tennis etc, see PointBasedSports);
+    -- all NULL for a non-point-based sport.
+    ppPointsPerSet INTEGER,
+    ppBestOfSets INTEGER,
+    ppWinByTwo INTEGER,
+    ppDeuceCap INTEGER,
     FOREIGN KEY (eventId) REFERENCES EventEntity(id) ON DELETE CASCADE
 );
 
@@ -99,6 +105,16 @@ CREATE TABLE EventMatchEntity (
     nextMatchId TEXT,
     nextMatchSlot INTEGER,
     FOREIGN KEY (eventGameId) REFERENCES EventGameEntity(id) ON DELETE CASCADE
+);
+
+-- One completed set within a point-based-sport match (Table Tennis etc).
+CREATE TABLE EventSetEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    matchId TEXT NOT NULL,
+    setNumber INTEGER NOT NULL,
+    scoreA INTEGER NOT NULL,
+    scoreB INTEGER NOT NULL,
+    FOREIGN KEY (matchId) REFERENCES EventMatchEntity(id) ON DELETE CASCADE
 );
 
 -- Sessions -------------------------------------------------------------
@@ -180,8 +196,8 @@ DELETE FROM EventEntity WHERE id = ?;
 -- Event games --------------------------------------------------------------
 
 insertEventGame:
-INSERT INTO EventGameEntity(id, eventId, sportName, emoji, format, teamMode, playersPerTeam, status, orderIndex)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO EventGameEntity(id, eventId, sportName, emoji, format, teamMode, playersPerTeam, status, orderIndex, ppPointsPerSet, ppBestOfSets, ppWinByTwo, ppDeuceCap)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 selectGamesByEvent:
 SELECT * FROM EventGameEntity WHERE eventId = ? ORDER BY orderIndex ASC;
@@ -197,7 +213,7 @@ UPDATE EventGameEntity SET status = ? WHERE id = ?;
 -- has no entrants yet (see ConfigureGameScreen's "locked" mode) -- name/emoji can
 -- be renamed any time.
 updateEventGameConfig:
-UPDATE EventGameEntity SET sportName = ?, emoji = ?, format = ?, teamMode = ?, playersPerTeam = ? WHERE id = ?;
+UPDATE EventGameEntity SET sportName = ?, emoji = ?, format = ?, teamMode = ?, playersPerTeam = ?, ppPointsPerSet = ?, ppBestOfSets = ?, ppWinByTwo = ?, ppDeuceCap = ? WHERE id = ?;
 
 deleteEventGame:
 DELETE FROM EventGameEntity WHERE id = ?;
@@ -255,3 +271,24 @@ UPDATE EventMatchEntity SET entrantBId = ? WHERE id = ?;
 
 deleteMatchesByGame:
 DELETE FROM EventMatchEntity WHERE eventGameId = ?;
+
+-- Event sets (point-based-sport matches only) -------------------------------
+
+insertSet:
+INSERT INTO EventSetEntity(id, matchId, setNumber, scoreA, scoreB)
+VALUES (?, ?, ?, ?, ?);
+
+selectSetsByMatch:
+SELECT * FROM EventSetEntity WHERE matchId = ? ORDER BY setNumber ASC;
+
+selectSetsByGame:
+SELECT EventSetEntity.* FROM EventSetEntity
+INNER JOIN EventMatchEntity ON EventSetEntity.matchId = EventMatchEntity.id
+WHERE EventMatchEntity.eventGameId = ?
+ORDER BY EventSetEntity.setNumber ASC;
+
+deleteSet:
+DELETE FROM EventSetEntity WHERE id = ?;
+
+deleteSetsByMatch:
+DELETE FROM EventSetEntity WHERE matchId = ?;

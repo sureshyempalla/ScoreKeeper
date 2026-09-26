@@ -1,0 +1,26 @@
+-- Adds Table Tennis (point-based-sport) support: per-game configurable match
+-- rules (sets/points/win-by-2/deuce cap) on EventGameEntity, and a new
+-- EventSetEntity table recording each match's completed sets. See
+-- PointRules/PointBasedSports/EventSet in EventModels.kt.
+--
+-- Existing installs are on schema version 5 (after 4.sqm's event end-date
+-- column) and don't have any of this yet; this migration brings them to
+-- version 6. All four new EventGameEntity columns are nullable and default
+-- to NULL, so every non-point-based game (Volleyball, Carrom, generic
+-- Singles/Doubles sports, ...) keeps working exactly as before -- a NULL
+-- ppPointsPerSet is exactly how the app tells "not a point-based sport"
+-- apart from "Table Tennis with rules not yet chosen".
+
+ALTER TABLE EventGameEntity ADD COLUMN ppPointsPerSet INTEGER;
+ALTER TABLE EventGameEntity ADD COLUMN ppBestOfSets INTEGER;
+ALTER TABLE EventGameEntity ADD COLUMN ppWinByTwo INTEGER;
+ALTER TABLE EventGameEntity ADD COLUMN ppDeuceCap INTEGER;
+
+CREATE TABLE EventSetEntity (
+    id TEXT NOT NULL PRIMARY KEY,
+    matchId TEXT NOT NULL,
+    setNumber INTEGER NOT NULL,
+    scoreA INTEGER NOT NULL,
+    scoreB INTEGER NOT NULL,
+    FOREIGN KEY (matchId) REFERENCES EventMatchEntity(id) ON DELETE CASCADE
+);

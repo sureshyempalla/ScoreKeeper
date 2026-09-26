@@ -7,6 +7,7 @@ import com.scorekeeper.db.EventEntity
 import com.scorekeeper.db.EventEntrantEntity
 import com.scorekeeper.db.EventGameEntity
 import com.scorekeeper.db.EventMatchEntity
+import com.scorekeeper.db.EventSetEntity
 import com.scorekeeper.db.GameSessionEntity
 import com.scorekeeper.db.PlayerEntity
 import com.scorekeeper.db.RoundScoreEntity
@@ -18,17 +19,20 @@ import com.scorekeeper.domain.EventGame
 import com.scorekeeper.domain.EventGameStatus
 import com.scorekeeper.domain.EventMatch
 import com.scorekeeper.domain.EventMatchStatus
+import com.scorekeeper.domain.EventSet
 import com.scorekeeper.domain.EventTeamMode
 import com.scorekeeper.domain.GameRules
 import com.scorekeeper.domain.GameSession
 import com.scorekeeper.domain.GameType
 import com.scorekeeper.domain.Player
+import com.scorekeeper.domain.PointRules
 import com.scorekeeper.domain.RoundOutcome
 import com.scorekeeper.domain.RoundScore
 import com.scorekeeper.domain.SavedPlayer
 import com.scorekeeper.domain.TournamentFormat
 import com.scorekeeper.events.BracketGenerator
 import com.scorekeeper.events.EventStandings
+import com.scorekeeper.events.PointRulesEngine
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -203,7 +207,8 @@ class GameRepository(
         emoji: String,
         format: TournamentFormat,
         teamMode: EventTeamMode,
-        playersPerTeam: Int
+        playersPerTeam: Int,
+        pointRules: PointRules? = null
     ): String = withContext(ioDispatcher) {
         val id = newId()
         val orderIndex = q.selectGamesByEvent(eventId).executeAsList().size
@@ -216,7 +221,11 @@ class GameRepository(
             teamMode = teamMode.name,
             playersPerTeam = playersPerTeam.toLong(),
             status = EventGameStatus.SETUP.name,
-            orderIndex = orderIndex.toLong()
+            orderIndex = orderIndex.toLong(),
+            ppPointsPerSet = pointRules?.pointsPerSet?.toLong(),
+            ppBestOfSets = pointRules?.bestOfSets?.toLong(),
+            ppWinByTwo = pointRules?.let { if (it.winByTwo) 1L else 0L },
+            ppDeuceCap = pointRules?.deuceCap?.toLong()
         )
         id
     }
@@ -233,9 +242,21 @@ class GameRepository(
         emoji: String,
         format: TournamentFormat,
         teamMode: EventTeamMode,
-        playersPerTeam: Int
+        playersPerTeam: Int,
+        pointRules: PointRules? = null
     ) = withContext(ioDispatcher) {
-        q.updateEventGameConfig(sportName, emoji, format.name, teamMode.name, playersPerTeam.toLong(), gameId)
+        q.updateEventGameConfig(
+            sportName = sportName,
+            emoji = emoji,
+            format = format.name,
+            teamMode = teamMode.name,
+            playersPerTeam = playersPerTeam.toLong(),
+            ppPointsPerSet = pointRules?.pointsPerSet?.toLong(),
+            ppBestOfSets = pointRules?.bestOfSets?.toLong(),
+            ppWinByTwo = pointRules?.let { if (it.winByTwo) 1L else 0L },
+            ppDeuceCap = pointRules?.deuceCap?.toLong(),
+            id = gameId
+        )
     }
 
     /** Removes a game entirely; entrants/matches cascade-delete with it. */
@@ -250,11 +271,14 @@ class GameRepository(
     fun observeEventGames(eventId: String): Flow<List<EventGame>> =
         q.selectGamesByEvent(eventId).asFlow().mapToList(ioDispatcher).map { rows -> rows.map { it.toDomainShallow() } }
 
-    /** Full detail for one event game -- entrants and matches included. */
+    /** Full detail for one event game -- entrants and matches (each with its sets) included. */
     suspend fun getEventGameDetail(gameId: String): EventGame? = withContext(ioDispatcher) {
         val game = q.selectGameById(gameId).executeAsOneOrNull() ?: return@withContext null
         val entrants = q.selectEntrantsByGame(gameId).executeAsList().map { it.toDomain() }
-        val matches = q.selectMatchesByGame(gameId).executeAsList().map { it.toDomain() }
+        val setsByMatch = q.selectSetsByGame(gameId).executeAsList().map { it.toDomain() to it.matchId }
+            .groupBy({ it.second }, { it.first })
+        val matches = q.selectMatchesByGame(gameId).executeAsList()
+            .map { it.toDomain(setsByMatch[it.id].orEmpty()) }
         game.toDomainShallow().copy(entrants = entrants, matches = matches)
     }
 
@@ -262,10 +286,12 @@ class GameRepository(
         val gameFlow = q.selectGameById(gameId).asFlow().mapToOneOrNull(ioDispatcher)
         val entrantsFlow = q.selectEntrantsByGame(gameId).asFlow().mapToList(ioDispatcher)
         val matchesFlow = q.selectMatchesByGame(gameId).asFlow().mapToList(ioDispatcher)
-        return combine(gameFlow, entrantsFlow, matchesFlow) { game, entrants, matches ->
+        val setsFlow = q.selectSetsByGame(gameId).asFlow().mapToList(ioDispatcher)
+        return combine(gameFlow, entrantsFlow, matchesFlow, setsFlow) { game, entrants, matches, sets ->
+            val setsByMatch = sets.groupBy({ it.matchId }, { it.toDomain() })
             game?.toDomainShallow()?.copy(
                 entrants = entrants.map { it.toDomain() },
-                matches = matches.map { it.toDomain() }
+                matches = matches.map { it.toDomain(setsByMatch[it.id].orEmpty()) }
             )
         }
     }
@@ -418,23 +444,83 @@ class GameRepository(
         withContext(ioDispatcher) {
             val match = q.selectMatchById(matchId).executeAsOneOrNull() ?: return@withContext
             q.updateMatchResult(scoreA.toLong(), scoreB.toLong(), EventMatchStatus.COMPLETE.name, winnerEntrantId, matchId)
-            val nextId = match.nextMatchId
-            if (nextId != null) {
-                if (match.nextMatchSlot == 0L) q.updateMatchEntrantA(winnerEntrantId, nextId)
-                else q.updateMatchEntrantB(winnerEntrantId, nextId)
-                q.updateGameStatus(EventGameStatus.IN_PROGRESS.name, match.eventGameId)
-            } else {
-                // No next match -- this was the final (or the only round-robin match
-                // isn't tracked this way). For elimination formats, a completed match
-                // with no next match means the bracket is done.
-                val remaining = q.selectMatchesByGame(match.eventGameId).executeAsList()
-                    .count { it.status != EventMatchStatus.COMPLETE.name }
-                q.updateGameStatus(
-                    if (remaining == 0) EventGameStatus.COMPLETE.name else EventGameStatus.IN_PROGRESS.name,
-                    match.eventGameId
-                )
-            }
+            advanceWinner(match, winnerEntrantId)
         }
+
+    /** Shared by [declareMatchWinner] and [recordSetScore]: advances the winner into the next bracket slot (if any), or marks the game complete once the final is decided. */
+    private suspend fun advanceWinner(match: EventMatchEntity, winnerEntrantId: String) {
+        val nextId = match.nextMatchId
+        if (nextId != null) {
+            if (match.nextMatchSlot == 0L) q.updateMatchEntrantA(winnerEntrantId, nextId)
+            else q.updateMatchEntrantB(winnerEntrantId, nextId)
+            q.updateGameStatus(EventGameStatus.IN_PROGRESS.name, match.eventGameId)
+        } else {
+            // No next match -- this was the final (or the only round-robin match
+            // isn't tracked this way). For elimination formats, a completed match
+            // with no next match means the bracket is done.
+            val remaining = q.selectMatchesByGame(match.eventGameId).executeAsList()
+                .count { it.status != EventMatchStatus.COMPLETE.name }
+            q.updateGameStatus(
+                if (remaining == 0) EventGameStatus.COMPLETE.name else EventGameStatus.IN_PROGRESS.name,
+                match.eventGameId
+            )
+        }
+    }
+
+    /**
+     * Records one completed set's final score for a point-based-sport match
+     * ([EventGame.pointRules] != null), validating it against the game's
+     * active [PointRules] first (rejects an impossible score, e.g. winning by
+     * only 1 point at deuce). Once one side reaches the majority of sets, the
+     * match is declared complete and the winner advances exactly like
+     * [declareMatchWinner]. Returns true if the set was recorded, false if it
+     * failed validation.
+     */
+    suspend fun recordSetScore(matchId: String, scoreA: Int, scoreB: Int): Boolean = withContext(ioDispatcher) {
+        val match = q.selectMatchById(matchId).executeAsOneOrNull() ?: return@withContext false
+        val game = q.selectGameById(match.eventGameId).executeAsOneOrNull() ?: return@withContext false
+        val rules = game.toDomainShallow().pointRules ?: return@withContext false
+        if (!PointRulesEngine.isValidCompletedSet(scoreA, scoreB, rules)) return@withContext false
+
+        val existingSets = q.selectSetsByMatch(matchId).executeAsList()
+        val nextSetNumber = (existingSets.maxOfOrNull { it.setNumber } ?: 0L) + 1
+        q.insertSet(id = newId(), matchId = matchId, setNumber = nextSetNumber, scoreA = scoreA.toLong(), scoreB = scoreB.toLong())
+
+        val allSets = existingSets.map { it.scoreA.toInt() to it.scoreB.toInt() } + (scoreA to scoreB)
+        val (setsWonA, setsWonB) = PointRulesEngine.tally(allSets)
+        val winnerSide = PointRulesEngine.matchWinnerSide(setsWonA, setsWonB, rules)
+        if (winnerSide != null) {
+            val winnerEntrantId = if (winnerSide == 'A') match.entrantAId else match.entrantBId
+            q.updateMatchResult(setsWonA.toLong(), setsWonB.toLong(), EventMatchStatus.COMPLETE.name, winnerEntrantId, matchId)
+            if (winnerEntrantId != null) advanceWinner(match, winnerEntrantId)
+        } else {
+            q.updateMatchScore(setsWonA.toLong(), setsWonB.toLong(), EventMatchStatus.LIVE.name, matchId)
+            q.updateGameStatus(EventGameStatus.IN_PROGRESS.name, match.eventGameId)
+        }
+        true
+    }
+
+    /**
+     * Removes the most recently recorded set for a point-based-sport match --
+     * a simple misclick correction, distinct from a formal score override.
+     * Only allowed while the match isn't yet [EventMatchStatus.COMPLETE], so
+     * it never has to unwind a bracket advance.
+     */
+    suspend fun undoLastSet(matchId: String) = withContext(ioDispatcher) {
+        val match = q.selectMatchById(matchId).executeAsOneOrNull() ?: return@withContext
+        if (match.status == EventMatchStatus.COMPLETE.name) return@withContext
+        val sets = q.selectSetsByMatch(matchId).executeAsList()
+        val last = sets.maxByOrNull { it.setNumber } ?: return@withContext
+        q.deleteSet(last.id)
+        val remaining = sets.filterNot { it.id == last.id }.map { it.scoreA.toInt() to it.scoreB.toInt() }
+        val (setsWonA, setsWonB) = PointRulesEngine.tally(remaining)
+        q.updateMatchScore(
+            setsWonA.toLong(),
+            setsWonB.toLong(),
+            if (remaining.isEmpty()) EventMatchStatus.PENDING.name else EventMatchStatus.LIVE.name,
+            matchId
+        )
+    }
 
     /** Marks a round-robin game (which has no single "final" match) as complete once every match is played. */
     suspend fun markGameCompleteIfAllMatchesDone(gameId: String) = withContext(ioDispatcher) {
@@ -463,7 +549,15 @@ class GameRepository(
         teamMode = runCatching { EventTeamMode.valueOf(teamMode) }.getOrDefault(EventTeamMode.SINGLES),
         playersPerTeam = playersPerTeam.toInt(),
         status = runCatching { EventGameStatus.valueOf(status) }.getOrDefault(EventGameStatus.SETUP),
-        orderIndex = orderIndex.toInt()
+        orderIndex = orderIndex.toInt(),
+        pointRules = ppPointsPerSet?.let { points ->
+            PointRules(
+                pointsPerSet = points.toInt(),
+                bestOfSets = ppBestOfSets?.toInt() ?: 3,
+                winByTwo = ppWinByTwo != 0L,
+                deuceCap = ppDeuceCap?.toInt()
+            )
+        }
     )
 
     private fun EventEntrantEntity.toDomain(): EventEntrant = EventEntrant(
@@ -475,7 +569,7 @@ class GameRepository(
         groupLabel = groupLabel
     )
 
-    private fun EventMatchEntity.toDomain(): EventMatch = EventMatch(
+    private fun EventMatchEntity.toDomain(sets: List<EventSet> = emptyList()): EventMatch = EventMatch(
         id = id,
         roundLabel = roundLabel,
         matchIndex = matchIndex.toInt(),
@@ -486,7 +580,14 @@ class GameRepository(
         status = runCatching { EventMatchStatus.valueOf(status) }.getOrDefault(EventMatchStatus.PENDING),
         winnerEntrantId = winnerEntrantId,
         nextMatchId = nextMatchId,
-        nextMatchSlot = nextMatchSlot?.toInt()
+        nextMatchSlot = nextMatchSlot?.toInt(),
+        sets = sets
+    )
+
+    private fun EventSetEntity.toDomain(): EventSet = EventSet(
+        setNumber = setNumber.toInt(),
+        scoreA = scoreA.toInt(),
+        scoreB = scoreB.toInt()
     )
 
     private fun SavedPlayerEntity.toDomain(): SavedPlayer = SavedPlayer(

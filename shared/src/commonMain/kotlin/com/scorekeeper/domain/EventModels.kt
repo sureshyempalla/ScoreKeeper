@@ -90,6 +90,17 @@ data class EventEntrant(
     val groupLabel: String? = null
 )
 
+/**
+ * One completed set within a point-based-sport match (e.g. Table Tennis).
+ * [scoreA]/[scoreB] are the final points each side reached in that set.
+ */
+@Serializable
+data class EventSet(
+    val setNumber: Int,
+    val scoreA: Int,
+    val scoreB: Int
+)
+
 @Serializable
 data class EventMatch(
     val id: String,
@@ -97,13 +108,46 @@ data class EventMatch(
     val matchIndex: Int,
     val entrantAId: String?,
     val entrantBId: String?,
+    /** For a point-based-sport match ([EventGame.pointRules] != null) this is sets won, not raw points. */
     val scoreA: Int,
     val scoreB: Int,
     val status: EventMatchStatus,
     val winnerEntrantId: String?,
     val nextMatchId: String?,
-    val nextMatchSlot: Int?
+    val nextMatchSlot: Int?,
+    /** Non-empty only for point-based-sport matches; each entry is one completed set's final score. */
+    val sets: List<EventSet> = emptyList()
 )
+
+/**
+ * Configurable match rules for a point-based racket sport (Table Tennis today;
+ * Badminton/Tennis could reuse this later). A match is won by the first side
+ * to reach [setsToWin] sets (a majority of [bestOfSets]); each set is won by
+ * the first side to reach [pointsPerSet] points, with a required 2-point
+ * margin at deuce unless [winByTwo] is false, or capped hard at [deuceCap]
+ * points regardless of margin once either side reaches it (null = no cap).
+ */
+@Serializable
+data class PointRules(
+    val pointsPerSet: Int = 11,
+    val bestOfSets: Int = 3,
+    val winByTwo: Boolean = true,
+    val deuceCap: Int? = null
+) {
+    /** Sets needed to win the match -- a majority of [bestOfSets] (e.g. best-of-3 -> 2). */
+    val setsToWin: Int get() = (bestOfSets / 2) + 1
+}
+
+/**
+ * Point-based racket sports whose matches use [PointRules] (configurable
+ * sets/points/win-by-2) instead of a single raw score. Keyed by sport name,
+ * case-insensitively, so adding Badminton later is a one-line change here.
+ */
+object PointBasedSports {
+    private val names = setOf("table tennis", "ping pong")
+
+    fun usesPointRules(sportName: String): Boolean = sportName.trim().lowercase() in names
+}
 
 data class EventGame(
     val id: String,
@@ -116,7 +160,9 @@ data class EventGame(
     val status: EventGameStatus,
     val orderIndex: Int,
     val entrants: List<EventEntrant> = emptyList(),
-    val matches: List<EventMatch> = emptyList()
+    val matches: List<EventMatch> = emptyList(),
+    /** Non-null only for [PointBasedSports] like Table Tennis; drives set-by-set score entry. */
+    val pointRules: PointRules? = null
 )
 
 /** A game's entrants ranked by result, used both for round-robin standings and for the results screen. */

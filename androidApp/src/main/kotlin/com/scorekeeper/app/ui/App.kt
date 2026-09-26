@@ -34,6 +34,7 @@ import com.scorekeeper.app.ui.screens.MatchScoreScreen
 import com.scorekeeper.app.ui.screens.PlayerPickerScreen
 import com.scorekeeper.app.ui.screens.RoundHistoryScreen
 import com.scorekeeper.app.ui.screens.ScoreEntryScreen
+import com.scorekeeper.app.ui.screens.SetScoreEntryScreen
 import com.scorekeeper.app.ui.screens.SetupScreen
 import com.scorekeeper.app.ui.screens.SummaryScreen
 import com.scorekeeper.app.ui.screens.VolleyballGroupsScreen
@@ -332,8 +333,8 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                     sportName = pendingSportName,
                     emoji = pendingSportEmoji,
                     onBack = { navController.popBackStack() },
-                    onContinue = { _, _, format, teamMode, playersPerTeam ->
-                        controller.addEventGame(eventId, pendingSportName, pendingSportEmoji, format, teamMode, playersPerTeam) { gameId ->
+                    onContinue = { _, _, format, teamMode, playersPerTeam, pointRules ->
+                        controller.addEventGame(eventId, pendingSportName, pendingSportEmoji, format, teamMode, playersPerTeam, pointRules) { gameId ->
                             if (format == TournamentFormat.GROUP_STAGE_THEN_KNOCKOUT) {
                                 navController.navigate(Screen.VolleyballFlow.build(gameId)) {
                                     popUpTo(Screen.EventDashboard.build(eventId))
@@ -361,12 +362,13 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                         initialFormat = g.format,
                         initialTeamMode = g.teamMode,
                         initialPlayersPerTeam = g.playersPerTeam,
+                        initialPointRules = g.pointRules,
                         onBack = { navController.popBackStack() },
                         onDelete = {
                             controller.deleteEventGame(gameId) { navController.popBackStack() }
                         },
-                        onContinue = { newSportName, newEmoji, format, teamMode, playersPerTeam ->
-                            controller.updateEventGameConfig(gameId, newSportName, newEmoji, format, teamMode, playersPerTeam) {
+                        onContinue = { newSportName, newEmoji, format, teamMode, playersPerTeam, pointRules ->
+                            controller.updateEventGameConfig(gameId, newSportName, newEmoji, format, teamMode, playersPerTeam, pointRules) {
                                 navController.popBackStack()
                             }
                         }
@@ -511,23 +513,41 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                 val game by watchEventGameDetailState(controller, gameId)
                 game?.let { g ->
                     val match = g.matches.firstOrNull { it.id == matchId }
-                    match?.let {
-                        MatchScoreScreen(
-                            match = it,
-                            sportLabel = g.sportName,
-                            entrantAName = g.entrants.firstOrNull { e -> e.id == it.entrantAId }?.name ?: "TBD",
-                            entrantBName = g.entrants.firstOrNull { e -> e.id == it.entrantBId }?.name ?: "TBD",
-                            onBack = { navController.popBackStack() },
-                            onSaveProgress = { scoreA, scoreB ->
-                                controller.saveMatchProgress(matchId, scoreA, scoreB)
-                                navController.popBackStack()
-                            },
-                            onDeclareWinner = { winnerId, scoreA, scoreB ->
-                                controller.declareMatchWinner(matchId, scoreA, scoreB, winnerId)
-                                controller.markGameCompleteIfAllMatchesDone(gameId)
-                                navController.popBackStack()
-                            }
-                        )
+                    match?.let { m ->
+                        val pointRules = g.pointRules
+                        if (pointRules != null) {
+                            SetScoreEntryScreen(
+                                match = m,
+                                rules = pointRules,
+                                sportLabel = g.sportName,
+                                entrantAName = g.entrants.firstOrNull { e -> e.id == m.entrantAId }?.name ?: "TBD",
+                                entrantBName = g.entrants.firstOrNull { e -> e.id == m.entrantBId }?.name ?: "TBD",
+                                onBack = { navController.popBackStack() },
+                                onSubmitSet = { scoreA, scoreB ->
+                                    controller.recordSetScore(matchId, scoreA, scoreB) {
+                                        controller.markGameCompleteIfAllMatchesDone(gameId)
+                                    }
+                                },
+                                onUndoLastSet = { controller.undoLastSet(matchId) }
+                            )
+                        } else {
+                            MatchScoreScreen(
+                                match = m,
+                                sportLabel = g.sportName,
+                                entrantAName = g.entrants.firstOrNull { e -> e.id == m.entrantAId }?.name ?: "TBD",
+                                entrantBName = g.entrants.firstOrNull { e -> e.id == m.entrantBId }?.name ?: "TBD",
+                                onBack = { navController.popBackStack() },
+                                onSaveProgress = { scoreA, scoreB ->
+                                    controller.saveMatchProgress(matchId, scoreA, scoreB)
+                                    navController.popBackStack()
+                                },
+                                onDeclareWinner = { winnerId, scoreA, scoreB ->
+                                    controller.declareMatchWinner(matchId, scoreA, scoreB, winnerId)
+                                    controller.markGameCompleteIfAllMatchesDone(gameId)
+                                    navController.popBackStack()
+                                }
+                            )
+                        }
                     }
                 }
             }
