@@ -52,12 +52,20 @@ import androidx.compose.ui.graphics.Color
  * its own card with a named roster (not a flat player list auto-split), a
  * live minimum-roster-size check, and a "+ Add Another Team" affordance so
  * the organizer can add as many teams as the event actually has.
+ *
+ * Also doubles as the generic entrant-entry step for any other sport routed
+ * into the same Group Stage + Playoffs flow (see App.kt's VolleyballFlow):
+ * when [requiresRoster] is false -- e.g. Table Tennis, which is played
+ * 1-vs-1 or 2-vs-2 rather than as rostered teams -- each "team" is just a
+ * single name (a player, or an already-paired doubles team typed as one
+ * entry) with no roster field or minimum-size check at all.
  */
 @Composable
 fun VolleyballTeamsScreen(
     sportName: String,
     emoji: String,
     minTeamSize: Int,
+    requiresRoster: Boolean = true,
     teams: List<EventEntrant>,
     onBack: () -> Unit,
     onAddTeam: (name: String, roster: List<String>) -> Unit,
@@ -65,12 +73,13 @@ fun VolleyballTeamsScreen(
     onRemoveTeam: (entrantId: String) -> Unit,
     onContinue: () -> Unit
 ) {
+    val noun = if (requiresRoster) "team" else "player"
     var showAddDialog by remember { mutableStateOf(false) }
     // Non-null while editing an existing team -- tapping a card opens the same
     // dialog as "Add Another Team" but pre-filled, saving through onUpdateTeam
     // instead of onAddTeam.
     var editingTeam by remember { mutableStateOf<EventEntrant?>(null) }
-    val allTeamsValid = teams.isNotEmpty() && teams.all { it.roster.size >= minTeamSize }
+    val allTeamsValid = teams.isNotEmpty() && (!requiresRoster || teams.all { it.roster.size >= minTeamSize })
     val canContinue = teams.size >= 2 && allTeamsValid
 
     Column(Modifier.fillMaxSize().background(Cream)) {
@@ -84,22 +93,24 @@ fun VolleyballTeamsScreen(
                     Icon(Icons.Filled.ChevronLeft, contentDescription = "Back")
                 }
             }
-            Text("$emoji $sportName Teams", style = MaterialTheme.typography.headlineSmall)
+            Text("$emoji $sportName ${if (requiresRoster) "Teams" else "Players"}", style = MaterialTheme.typography.headlineSmall)
         }
 
-        Text(
-            "Each team needs at least $minTeamSize players on its roster.",
-            style = MaterialTheme.typography.labelMedium,
-            color = Muted,
-            modifier = Modifier.padding(20.dp, 4.dp, 20.dp, 0.dp)
-        )
+        if (requiresRoster) {
+            Text(
+                "Each team needs at least $minTeamSize players on its roster.",
+                style = MaterialTheme.typography.labelMedium,
+                color = Muted,
+                modifier = Modifier.padding(20.dp, 4.dp, 20.dp, 0.dp)
+            )
+        }
 
         LazyColumn(
             Modifier.weight(1f).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(teams, key = { it.id }) { team ->
-                TeamCard(team, minTeamSize, onEdit = { editingTeam = team }, onRemove = { onRemoveTeam(team.id) })
+                TeamCard(team, minTeamSize, requiresRoster, onEdit = { editingTeam = team }, onRemove = { onRemoveTeam(team.id) })
             }
             item {
                 Surface(
@@ -114,7 +125,7 @@ fun VolleyballTeamsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null, tint = Green)
-                        Text("Add Another Team", color = Green, fontWeight = FontWeight.Bold)
+                        Text("Add Another ${noun.replaceFirstChar { it.uppercase() }}", color = Green, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -125,7 +136,7 @@ fun VolleyballTeamsScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "${teams.size} team${if (teams.size == 1) "" else "s"} added" +
+                "${teams.size} $noun${if (teams.size == 1) "" else "s"} added" +
                     if (teams.size < 2) " · need at least 2" else if (!allTeamsValid) " · fix rosters below $minTeamSize" else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = Muted,
@@ -149,27 +160,33 @@ fun VolleyballTeamsScreen(
         fun close() { showAddDialog = false; editingTeam = null }
         AlertDialog(
             onDismissRequest = ::close,
-            title = { Text(if (isEditing) "Edit team" else "Add a team") },
+            title = { Text(if (isEditing) "Edit $noun" else "Add a $noun") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Team name") },
+                        label = { Text(if (requiresRoster) "Team name" else "Player name") },
                         singleLine = true
                     )
-                    OutlinedTextField(
-                        value = rosterText,
-                        onValueChange = { rosterText = it },
-                        label = { Text("Players (comma separated)") }
-                    )
+                    if (requiresRoster) {
+                        OutlinedTextField(
+                            value = rosterText,
+                            onValueChange = { rosterText = it },
+                            label = { Text("Players (comma separated)") }
+                        )
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         val trimmedName = name.trim()
-                        val roster = rosterText.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                        val roster = if (requiresRoster) {
+                            rosterText.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                        } else {
+                            emptyList()
+                        }
                         if (trimmedName.isNotBlank()) {
                             val editing = editingTeam
                             if (editing != null) onUpdateTeam(editing.id, trimmedName, roster) else onAddTeam(trimmedName, roster)
@@ -185,8 +202,8 @@ fun VolleyballTeamsScreen(
 }
 
 @Composable
-private fun TeamCard(team: EventEntrant, minTeamSize: Int, onEdit: () -> Unit, onRemove: () -> Unit) {
-    val valid = team.roster.size >= minTeamSize
+private fun TeamCard(team: EventEntrant, minTeamSize: Int, requiresRoster: Boolean, onEdit: () -> Unit, onRemove: () -> Unit) {
+    val valid = !requiresRoster || team.roster.size >= minTeamSize
     Surface(
         onClick = onEdit,
         shape = RoundedCornerShape(14.dp),
@@ -202,26 +219,28 @@ private fun TeamCard(team: EventEntrant, minTeamSize: Int, onEdit: () -> Unit, o
                 Text(team.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
                 Row {
                     IconButton(onClick = onEdit) {
-                        Icon(Icons.Filled.Edit, contentDescription = "Edit team", tint = Muted)
+                        Icon(Icons.Filled.Edit, contentDescription = "Edit", tint = Muted)
                     }
                     IconButton(onClick = onRemove) {
-                        Icon(Icons.Filled.Close, contentDescription = "Remove team", tint = Muted)
+                        Icon(Icons.Filled.Close, contentDescription = "Remove", tint = Muted)
                     }
                 }
             }
-            Text(
-                if (team.roster.isEmpty()) "No players yet" else team.roster.joinToString(", "),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (valid) Muted else Danger,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-            Text(
-                "${team.roster.size} / $minTeamSize players" + if (!valid) " · needs ${minTeamSize - team.roster.size} more" else "",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (valid) Green else Danger,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 6.dp)
-            )
+            if (requiresRoster) {
+                Text(
+                    if (team.roster.isEmpty()) "No players yet" else team.roster.joinToString(", "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (valid) Muted else Danger,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                Text(
+                    "${team.roster.size} / $minTeamSize players" + if (!valid) " · needs ${minTeamSize - team.roster.size} more" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (valid) Green else Danger,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
         }
     }
 }

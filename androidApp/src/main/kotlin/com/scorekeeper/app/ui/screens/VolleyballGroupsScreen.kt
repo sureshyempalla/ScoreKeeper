@@ -171,7 +171,9 @@ private fun GroupTeamRow(
         ) {
             Column {
                 Text(team.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-                Text("${team.roster.size} players", style = MaterialTheme.typography.labelSmall, color = Muted)
+                if (team.roster.isNotEmpty()) {
+                    Text("${team.roster.size} players", style = MaterialTheme.typography.labelSmall, color = Muted)
+                }
             }
             Box {
                 TextButton(onClick = { menuOpen = true }) {

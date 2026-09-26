@@ -408,7 +408,15 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                 val gameId = backStackEntry.arguments?.getString("gameId") ?: return@composable
                 val game by watchEventGameDetailState(controller, gameId)
                 game?.let { g ->
-                    val minTeamSize = SportRules.minTeamSize(g.sportName) ?: 6
+                    // Volleyball-style sports (SportRules.minTeamSize) always need a real
+                    // roster; everything else routed here (e.g. Table Tennis picking
+                    // "Group Stage + Playoffs") is played 1-vs-1 or 2-vs-2, not as rostered
+                    // teams -- so its "team" is just a lone player (Singles) or the pair
+                    // already sized by the players-per-team stepper (Doubles/Teams), and
+                    // the Teams screen collects flat names instead of demanding a roster.
+                    val requiresRoster = SportRules.minTeamSize(g.sportName) != null
+                    val minTeamSize = SportRules.minTeamSize(g.sportName)
+                        ?: if (g.teamMode == EventTeamMode.SINGLES) 1 else g.playersPerTeam
                     // Groups aren't assigned until the organizer taps "Continue to Groups" on the
                     // Teams screen (autoAssignGroups labels every entrant at once), so "no entrant
                     // has a groupLabel yet" is what actually distinguishes "still adding teams"
@@ -427,6 +435,7 @@ private fun ScoreKeeperHome(controller: AppController, authController: AuthContr
                             sportName = g.sportName,
                             emoji = g.emoji,
                             minTeamSize = minTeamSize,
+                            requiresRoster = requiresRoster,
                             teams = g.entrants,
                             onBack = { navController.popBackStack() },
                             onAddTeam = { name, roster -> controller.addTeam(gameId, name, roster) },
